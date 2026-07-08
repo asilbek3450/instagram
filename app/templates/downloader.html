@@ -156,25 +156,31 @@
                 <h1 class="display-4 fw-bold mb-3" style="line-height: 1.15;">
                     Instagram Reels <span class="gradient-text">Downloader</span>
                 </h1>
-                <p class="lead text-secondary mb-4">
-                    Paste a reel link for an instant download, or type a username to browse
+                           <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;">
+                    Paste a reel link to download it, or type a username to browse
                     and save any public profile's reels in HD.
                 </p>
 
-                <div class="dl-search-card">
+                <!-- Search Input -->
+                <div class="search-container mx-auto position-relative" style="max-width: 650px;">
                     <form id="dl-form" autocomplete="off">
-                        <div class="dl-search-wrap shadow-lg">
-                            <i class="bi bi-instagram fs-5 text-secondary"></i>
-                            <input type="text" class="form-control dl-input" id="dl-input"
-                                   placeholder="@username  or  instagram.com/reel/…" required>
-                            <button type="submit" class="btn gradient-btn px-4 py-2 fw-bold rounded-4" id="dl-submit-btn" style="height: 48px;">
-                                <span id="dl-submit-label"><i class="bi bi-search me-1"></i></span>
+                        <div class="input-group glass-card border-0 rounded-pill overflow-hidden shadow-sm" style="background: var(--bg-card); padding: 5px;">
+                            <span class="input-group-text bg-transparent border-0 ps-4 text-secondary">
+                                <i class="bi bi-instagram fs-5"></i>
+                            </span>
+                            <input type="text" id="dl-input" class="form-control border-0 bg-transparent fs-5 px-3 py-3" 
+                                   placeholder="Username or Reel link..." aria-label="Search">
+                            <button type="submit" class="btn gradient-btn rounded-pill px-4 m-1 fw-bold" id="dl-submit-btn">
+                                <span id="dl-submit-label">
+                                    <i class="bi bi-search me-1"></i><span class="d-none d-sm-inline"></span>
+                                </span>
                             </button>
                         </div>
                     </form>
-                    <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
-                        <span class="dl-chip" onclick="fillExample('@aytishnik.uz')"><i class="bi bi-person me-1"></i>@username → browse reels</span>
-                        <span class="dl-chip" onclick="fillExample('https://www.instagram.com/reel/')"><i class="bi bi-link-45deg me-1"></i>reel link → instant download</span>
+                    
+                    <div class="mt-3 text-center small text-secondary">
+                        <span class="dl-chip" onclick="fillExample('aytishnik.uz')"><i class="bi bi-person me-1"></i>@username &rarr; browse reels</span>
+                        <span class="dl-chip" onclick="fillExample('https://www.instagram.com/reel/')"><i class="bi bi-link-45deg me-1"></i>reel link &rarr; download reel</span>
                     </div>
                 </div>
 
@@ -339,14 +345,32 @@
         }
     });
 
-    // ── Direct link → instant download ──────────────────────────────────
+    // ── Direct link → instant download (changed to display card) ─────────
     async function directDownload(url) {
         setBusy(true);
+        loadMoreBtn.classList.add('d-none');
+        document.getElementById('how-it-works').classList.add('d-none');
+        grid.innerHTML = skeletons(1);
         try {
             const info = await resolveUrl(url);
-            triggerDownload(info);
-            showAlert(`Downloading "${(info.title || 'reel').slice(0, 60)}" (${info.quality || 'HD'})…`, 'success');
+            removeSkeletons();
+
+            document.getElementById('profile-header').classList.remove('d-flex');
+            document.getElementById('profile-header').classList.add('d-none');
+
+            const item = {
+                thumbnail: info.thumbnail,
+                code: info.code,
+                caption: info.title,
+                post_url: url,
+                counts_hidden: true,
+                comment_count: 0
+            };
+
+            resolveCache[info.code] = info;
+            grid.innerHTML = cardHtml(item);
         } catch (err) {
+            removeSkeletons();
             showAlert(err.message);
         } finally {
             setBusy(false);

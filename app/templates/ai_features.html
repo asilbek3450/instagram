@@ -288,11 +288,39 @@ function copyHashtags() {
 }
 
 function copyText(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showAlert('success', 'Hashtags copied to clipboard!');
-    }).catch(err => {
-        console.error('Copy failed', err);
-    });
+    // Modern Clipboard API (works on HTTPS / localhost)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showAlert('success', 'Hashtags copied to clipboard!');
+        }).catch(() => {
+            _fallbackCopy(text);
+        });
+    } else {
+        _fallbackCopy(text);
+    }
+}
+
+function _fallbackCopy(text) {
+    // Fallback: create a temporary textarea and use execCommand
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length); // for mobile
+        const success = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (success) {
+            showAlert('success', 'Hashtags copied to clipboard!');
+        } else {
+            showAlert('danger', 'Could not copy. Please select and copy manually.');
+        }
+    } catch (err) {
+        showAlert('danger', 'Copy not supported in this browser.');
+        console.error('Fallback copy failed:', err);
+    }
 }
 </script>
 <style>
