@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request, make_response, redirect
+from flask import Blueprint, render_template, request, make_response, redirect, Response
+from datetime import datetime
 
 views_bp = Blueprint('views', __name__)
 
@@ -69,3 +70,58 @@ def admin():
 def downloader():
     # Public tool — works without an account/login
     return render_template('downloader.html')
+
+
+# ── SEO: robots.txt ──────────────────────────────────────────────────────────
+@views_bp.route('/robots.txt')
+def robots_txt():
+    base_url = request.host_url.rstrip('/')
+    content = f"""User-agent: *
+Allow: /
+Allow: /downloader
+Disallow: /api/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /followers
+Disallow: /posts
+Disallow: /stories
+Disallow: /comments
+Disallow: /ai-features
+Disallow: /reports
+Disallow: /profile
+
+Sitemap: {base_url}/sitemap.xml
+"""
+    return Response(content, mimetype='text/plain')
+
+
+# ── SEO: sitemap.xml ─────────────────────────────────────────────────────────
+@views_bp.route('/sitemap.xml')
+def sitemap_xml():
+    base_url = request.host_url.rstrip('/')
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    
+    # Public-facing pages only
+    pages = [
+        {'loc': '/',            'priority': '1.0', 'changefreq': 'weekly'},
+        {'loc': '/downloader',  'priority': '0.9', 'changefreq': 'weekly'},
+        {'loc': '/login',       'priority': '0.5', 'changefreq': 'monthly'},
+        {'loc': '/register',    'priority': '0.6', 'changefreq': 'monthly'},
+    ]
+    
+    urls = ''
+    for page in pages:
+        urls += f"""
+    <url>
+        <loc>{base_url}{page['loc']}</loc>
+        <lastmod>{today}</lastmod>
+        <changefreq>{page['changefreq']}</changefreq>
+        <priority>{page['priority']}</priority>
+    </url>"""
+    
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{urls}
+</urlset>"""
+    
+    return Response(xml, mimetype='application/xml')
