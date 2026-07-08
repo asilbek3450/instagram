@@ -1,0 +1,224 @@
+# Translations template for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-07-08 18:04+0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: app/templates/landing.html:43
+msgid "Features"
+msgstr ""
+
+#: app/templates/landing.html:44
+msgid "Pricing"
+msgstr ""
+
+#: app/templates/landing.html:45
+msgid "Reels Downloader"
+msgstr ""
+
+#: app/templates/landing.html:66
+msgid "Sign In"
+msgstr ""
+
+#: app/templates/landing.html:67
+msgid "Get Started"
+msgstr ""
+
+#: app/templates/landing.html:77
+msgid "AI-Powered Analytics"
+msgstr ""
+
+#: app/templates/landing.html:79
+msgid "Grow Your Instagram"
+msgstr ""
+
+#: app/templates/landing.html:79
+msgid "Scientifically"
+msgstr ""
+
+#: app/templates/landing.html:82
+msgid ""
+"InstaTrack Pro gives you deep, actionable insights on your followers, "
+"engagement metrics, comment sentiment, and predictive AI recommendations."
+" Stop guessing and start growing."
+msgstr ""
+
+#: app/templates/landing.html:85
+msgid "Start Free Trial"
+msgstr ""
+
+#: app/templates/landing.html:86
+msgid "See Features"
+msgstr ""
+
+#: app/templates/landing.html:99
+msgid "Simulated Feed"
+msgstr ""
+
+#: app/templates/landing.html:108
+msgid "Followers"
+msgstr ""
+
+#: app/templates/landing.html:112
+msgid "Engagement"
+msgstr ""
+
+#: app/templates/landing.html:116
+msgid "Positive Sent."
+msgstr ""
+
+#: app/templates/landing.html:123
+msgid "AI Growth Prediction"
+msgstr ""
+
+#: app/templates/landing.html:126
+msgid "Based on your high engagement posting window at"
+msgstr ""
+
+#: app/templates/landing.html:126
+msgid "7:00 PM Thursday"
+msgstr ""
+
+#: app/templates/landing.html:126
+msgid "you are projected to gain"
+msgstr ""
+
+#: app/templates/landing.html:126
+msgid "+1,250 followers"
+msgstr ""
+
+#: app/templates/landing.html:126
+msgid "in the next 7 days."
+msgstr ""
+
+#: app/templates/landing.html:138
+msgid "Enterprise-Grade Features"
+msgstr ""
+
+#: app/templates/landing.html:139
+msgid ""
+"Track everything you need to know about your Instagram profile with "
+"state-of-the-art tools."
+msgstr ""
+
+#: app/templates/landing.html:146
+msgid "Historical Growth Tracking"
+msgstr ""
+
+#: app/templates/landing.html:147
+msgid ""
+"Understand daily growth trends, demographics breakdown by gender and "
+"country, and benchmark accounts."
+msgstr ""
+
+#: app/templates/landing.html:153
+msgid "Sentiment & Spam Audit"
+msgstr ""
+
+#: app/templates/landing.html:154
+msgid ""
+"Perform deep natural language checks on post comments. Easily filter "
+"spam, negativity, and promotional bots."
+msgstr ""
+
+#: app/templates/landing.html:160
+msgid "PDF Reports Compiler"
+msgstr ""
+
+#: app/templates/landing.html:161
+msgid ""
+"Automatically compile weekly/monthly performance reports. Ideal for "
+"digital marketing agencies and influencers."
+msgstr ""
+
+#: app/templates/landing.html:172
+msgid "Simple, Transparent Pricing"
+msgstr ""
+
+#: app/templates/landing.html:173
+msgid ""
+"Flexible plans for content creators, managers, and enterprise "
+"organizations."
+msgstr ""
+
+#: app/templates/landing.html:180
+msgid "Free Starter"
+msgstr ""
+
+#: app/templates/landing.html:183 app/templates/landing.html:202
+msgid "month"
+msgstr ""
+
+#: app/templates/landing.html:186
+msgid "1 Instagram Account"
+msgstr ""
+
+#: app/templates/landing.html:187
+msgid "7-Day Growth Metrics"
+msgstr ""
+
+#: app/templates/landing.html:188
+msgid "Basic Post Analytics"
+msgstr ""
+
+#: app/templates/landing.html:189
+msgid "AI Suggestions"
+msgstr ""
+
+#: app/templates/landing.html:190
+msgid "PDF Reports Export"
+msgstr ""
+
+#: app/templates/landing.html:192
+msgid "Sign Up Free"
+msgstr ""
+
+#: app/templates/landing.html:198
+msgid "Most Popular"
+msgstr ""
+
+#: app/templates/landing.html:199
+msgid "Pro Influencer"
+msgstr ""
+
+#: app/templates/landing.html:205
+msgid "5 Instagram Accounts"
+msgstr ""
+
+#: app/templates/landing.html:206
+msgid "30-Day Growth History"
+msgstr ""
+
+#: app/templates/landing.html:207
+msgid "Full Sentiment/Spam Audit"
+msgstr ""
+
+#: app/templates/landing.html:208
+msgid "AI Posting Time & Tag Suggestions"
+msgstr ""
+
+#: app/templates/landing.html:209
+msgid "PDF Reports & Downloads"
+msgstr ""
+
+#: app/templates/landing.html:211
+msgid "Get Started Pro"
+msgstr ""
+
+#: app/templates/landing.html:221
+msgid "All rights reserved. Created for research and demo."
+msgstr ""
+

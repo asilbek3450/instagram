@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reels Downloader | InstaTrack Pro</title>
+    <meta name="description" content="Download Instagram Reels and videos in HD for free. No login required — paste a link or browse any public profile's reels.">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
+    <meta name="color-scheme" content="light dark">
+    <script>
+    {
+      const colorScheme = localStorage.getItem("color-scheme") || "dark";
+      document.querySelector('meta[name="color-scheme"]').content = colorScheme;
+      document.documentElement.style.colorScheme = colorScheme;
+      document.documentElement.setAttribute("data-bs-theme", colorScheme);
+    }
+    </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        /* ── Downloader page specific styles ─────────────────────────── */
+        .dl-hero {
+            position: relative;
+            overflow: hidden;
+        }
+        .dl-orb {
+            position: absolute; border-radius: 50%; filter: blur(90px);
+            opacity: .35; pointer-events: none; z-index: 0;
+            animation: orbFloat 14s ease-in-out infinite alternate;
+        }
+        .dl-orb-1 { width: 380px; height: 380px; top: -120px; left: -80px;
+                    background: hsl(var(--hue-primary), 85%, 55%); }
+        .dl-orb-2 { width: 320px; height: 320px; bottom: -140px; right: -60px;
+                    background: hsl(var(--hue-secondary), 85%, 55%); animation-delay: -7s; }
+        @keyframes orbFloat {
+            from { transform: translate(0, 0) scale(1); }
+            to   { transform: translate(40px, 30px) scale(1.15); }
+        }
+
+        .dl-search-card { position: relative; z-index: 1; }
+        .dl-input {
+            height: 58px; font-size: 1.05rem;
+            background: transparent; color: var(--text-primary);
+            border: none; outline: none; box-shadow: none !important;
+        }
+        .dl-input::placeholder { color: var(--text-secondary); opacity: .7; }
+        .dl-search-wrap {
+            display: flex; align-items: center; gap: .5rem;
+            padding: .4rem .5rem .4rem 1.1rem;
+            border-radius: 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            backdrop-filter: blur(16px);
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .dl-search-wrap:focus-within {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px hsla(var(--hue-primary), 85%, 60%, .15);
+        }
+        .dl-chip {
+            cursor: pointer; user-select: none;
+            border: 1px dashed var(--border-card);
+            background: transparent; color: var(--text-secondary);
+            border-radius: 30px; padding: .35rem .9rem; font-size: .8rem;
+            transition: all .2s;
+        }
+        .dl-chip:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+        /* Reel cards */
+        .reel-card {
+            border-radius: 16px; overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            backdrop-filter: blur(16px);
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+        .reel-card:hover { transform: translateY(-5px); box-shadow: 0 18px 40px rgba(0,0,0,.25); }
+        .reel-thumb-wrap { position: relative; aspect-ratio: 9/14; overflow: hidden; background: #11142a; }
+        .reel-thumb { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s ease; }
+        .reel-card:hover .reel-thumb { transform: scale(1.06); }
+        .reel-overlay {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0) 55%);
+            opacity: 0; transition: opacity .25s;
+        }
+        .reel-card:hover .reel-overlay { opacity: 1; }
+        .reel-play-btn {
+            width: 62px; height: 62px; border-radius: 50%; border: 0;
+            background: rgba(255,255,255,.92); color: #111;
+            display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+            transform: scale(.8); transition: transform .25s; cursor: pointer;
+        }
+        .reel-card:hover .reel-play-btn { transform: scale(1); }
+        .reel-stats {
+            position: absolute; bottom: 8px; left: 8px; right: 8px;
+            display: flex; gap: 6px; flex-wrap: wrap;
+        }
+        .reel-stat {
+            font-size: .72rem; font-weight: 600; color: #fff;
+            background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+            border-radius: 20px; padding: 2px 9px;
+        }
+
+        /* Skeleton shimmer */
+        .skeleton-card { border-radius: 16px; overflow: hidden; border: 1px solid var(--border-card); }
+        .skeleton-shimmer {
+            aspect-ratio: 9/14; width: 100%;
+            background: linear-gradient(110deg, var(--bg-card) 30%, hsla(var(--hue-primary), 60%, 60%, .12) 50%, var(--bg-card) 70%);
+            background-size: 220% 100%;
+            animation: shimmer 1.4s linear infinite;
+        }
+        @keyframes shimmer { to { background-position-x: -220%; } }
+
+        .dl-step-icon {
+            width: 52px; height: 52px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+            background: linear-gradient(135deg, hsla(var(--hue-primary),85%,60%,.15), hsla(var(--hue-secondary),85%,60%,.15));
+            color: var(--color-primary);
+        }
+        #preview-video { width: 100%; max-height: 72vh; border-radius: 12px; background: #000; }
+        .btn-download-sm { white-space: nowrap; }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg border-bottom border-card" style="background: var(--bg-card); backdrop-filter: blur(16px); position: relative; z-index: 5;">
+        <div class="container">
+            <a class="navbar-brand fw-bold fs-4 gradient-text" href="/">
+                <img src="{{ url_for('static', filename='images/InstaTrackPro_icon.svg') }}" alt="Logo" class="me-2" style="width: 28px; height: 28px;">InstaTrack Pro
+            </a>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <a class="btn btn-outline-secondary btn-sm px-3 d-none d-sm-inline-block" href="/">
+                    <i class="bi bi-graph-up-arrow me-1"></i>Analytics
+                </a>
+                <a class="btn gradient-btn btn-sm px-3 d-none d-sm-inline-block" href="/register">Get Started</a>
+                <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="dlToggleTheme()" title="Toggle Theme">
+                    <i class="bi bi-sun" id="theme-icon"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero + Search -->
+    <section class="dl-hero py-5">
+        <div class="dl-orb dl-orb-1"></div>
+        <div class="dl-orb dl-orb-2"></div>
+        <div class="container position-relative" style="z-index: 1;">
+            <div class="text-center mx-auto" style="max-width: 720px;">
+                <span class="badge badge-glow-primary px-3 py-2 mb-3 rounded-pill fw-bold">
+                    <i class="bi bi-download me-1"></i>Free Tool · No Login Required
+                </span>
+                <h1 class="display-4 fw-bold mb-3" style="line-height: 1.15;">
+                    Instagram Reels <span class="gradient-text">Downloader</span>
+                </h1>
+                <p class="lead text-secondary mb-4">
+                    Paste a reel link for an instant download, or type a username to browse
+                    and save any public profile's reels in HD.
+                </p>
+
+                <div class="dl-search-card">
+                    <form id="dl-form" autocomplete="off">
+                        <div class="dl-search-wrap shadow-lg">
+                            <i class="bi bi-instagram fs-5 text-secondary"></i>
+                            <input type="text" class="form-control dl-input" id="dl-input"
+                                   placeholder="@username  or  instagram.com/reel/…" required>
+                            <button type="submit" class="btn gradient-btn px-4 py-2 fw-bold rounded-4" id="dl-submit-btn" style="height: 48px;">
+                                <span id="dl-submit-label"><i class="bi bi-search me-1"></i></span>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                        <span class="dl-chip" onclick="fillExample('@aytishnik.uz')"><i class="bi bi-person me-1"></i>@username → browse reels</span>
+                        <span class="dl-chip" onclick="fillExample('https://www.instagram.com/reel/')"><i class="bi bi-link-45deg me-1"></i>reel link → instant download</span>
+                    </div>
+                </div>
+
+                <div id="dl-alert" class="mt-4"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results -->
+    <section class="container pb-5 flex-grow-1">
+        <div id="profile-header" class="d-none align-items-center justify-content-between mb-4 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-5"
+                     style="width: 48px; height: 48px; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">@</div>
+                <div>
+                    <h5 class="m-0 fw-bold" id="profile-username">—</h5>
+                    <span class="text-secondary small" id="profile-meta">Public reels</span>
+                </div>
+            </div>
+            <a class="btn btn-sm btn-outline-secondary" id="profile-open-link" href="#" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right me-1"></i>Open profile
+            </a>
+        </div>
+
+        <div class="row g-3" id="results-grid"></div>
+
+        <div class="text-center mt-4">
+            <button class="btn btn-outline-secondary px-5 d-none" id="load-more-btn" onclick="loadMore()">
+                <i class="bi bi-arrow-down-circle me-2"></i>Load more
+            </button>
+        </div>
+
+        <!-- How it works (shown until first search) -->
+        <div id="how-it-works" class="mt-4">
+            <div class="row g-3 justify-content-center">
+                <div class="col-md-4">
+                    <div class="glass-card p-4 h-100 text-center">
+                        <div class="dl-step-icon mx-auto mb-3"><i class="bi bi-1-circle"></i></div>
+                        <h6 class="fw-bold">Paste or type</h6>
+                        <p class="text-secondary small mb-0">Drop a reel link for one video, or a username to see the full reels feed.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="glass-card p-4 h-100 text-center">
+                        <div class="dl-step-icon mx-auto mb-3"><i class="bi bi-2-circle"></i></div>
+                        <h6 class="fw-bold">Preview</h6>
+                        <p class="text-secondary small mb-0">Watch any reel right on this page before saving it — no Instagram login.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="glass-card p-4 h-100 text-center">
+                        <div class="dl-step-icon mx-auto mb-3"><i class="bi bi-3-circle"></i></div>
+                        <h6 class="fw-bold">Download in HD</h6>
+                        <p class="text-secondary small mb-0">One click saves the original-quality MP4 straight to your device.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer py-3 text-center border-top border-card mt-auto" style="background: var(--bg-card);">
+        <div class="container text-muted small">
+            &copy; 2026 InstaTrack Pro · For personal use only — respect creators' copyrights.
+        </div>
+    </footer>
+
+    <!-- Preview Modal -->
+    <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0 shadow">
+                <div class="modal-header border-0 pb-0">
+                    <h6 class="modal-title text-truncate" id="preview-title"><i class="bi bi-play-circle me-2"></i>Preview</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <video id="preview-video" controls playsinline></video>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <a class="btn gradient-btn w-100" id="preview-download-btn" href="#">
+                        <i class="bi bi-download me-2"></i>Download MP4
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // ── Theme toggle (standalone page — no app.js dependency) ──────────
+    function dlApplyThemeIcon() {
+        const scheme = localStorage.getItem('color-scheme') || 'dark';
+        document.getElementById('theme-icon').className = scheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+    }
+    function dlToggleTheme() {
+        const next = (localStorage.getItem('color-scheme') || 'dark') === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('color-scheme', next);
+        document.documentElement.style.colorScheme = next;
+        document.documentElement.setAttribute('data-bs-theme', next);
+        document.querySelector('meta[name="color-scheme"]').content = next;
+        dlApplyThemeIcon();
+    }
+    dlApplyThemeIcon();
+
+    // ── State ───────────────────────────────────────────────────────────
+    let currentUsername = null;
+    let nextMaxId = null;
+    let loading = false;
+    const resolveCache = {};   // code -> {download_url, filename, ...}
+    const itemsByCode = {};    // code -> reels list item (may carry download_url)
+
+    const grid = document.getElementById('results-grid');
+    const alertBox = document.getElementById('dl-alert');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+
+    function fmt(n) {
+        if (n === null || n === undefined) return '0';
+        if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+        return String(n);
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+    function showAlert(msg, type = 'danger') {
+        alertBox.innerHTML = `<div class="alert alert-${type} glass-card border-0 shadow-sm mb-0 py-2 px-3 d-inline-flex align-items-center gap-2">
+            <i class="bi ${type === 'danger' ? 'bi-exclamation-triangle' : 'bi-check-circle'}"></i><span>${esc(msg)}</span></div>`;
+    }
+    function clearAlert() { alertBox.innerHTML = ''; }
+    function fillExample(v) { const i = document.getElementById('dl-input'); i.value = v; i.focus(); }
+
+    function setBusy(busy) {
+        loading = busy;
+        const btn = document.getElementById('dl-submit-btn');
+        btn.disabled = busy;
+        document.getElementById('dl-submit-label').innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm"></span>'
+            : '<i class="bi bi-search me-1"></i><span class="d-none d-sm-inline"></span>';
+    }
+
+    function skeletons(count = 8) {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            html += `<div class="col-6 col-md-4 col-lg-3 skeleton-placeholder">
+                        <div class="skeleton-card"><div class="skeleton-shimmer"></div></div>
+                     </div>`;
+        }
+        return html;
+    }
+    function removeSkeletons() { grid.querySelectorAll('.skeleton-placeholder').forEach(el => el.remove()); }
+
+    // ── Search form ─────────────────────────────────────────────────────
+    document.getElementById('dl-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (loading) return;
+        clearAlert();
+        const raw = document.getElementById('dl-input').value.trim();
+        if (!raw) return;
+
+        if (/instagram\.com\/(reel|reels|p|tv)\//i.test(raw)) {
+            await directDownload(raw);
+        } else {
+            await loadReels(raw.replace(/^@/, ''), '', false);
+        }
+    });
+
+    // ── Direct link → instant download ──────────────────────────────────
+    async function directDownload(url) {
+        setBusy(true);
+        try {
+            const info = await resolveUrl(url);
+            triggerDownload(info);
+            showAlert(`Downloading "${(info.title || 'reel').slice(0, 60)}" (${info.quality || 'HD'})…`, 'success');
+        } catch (err) {
+            showAlert(err.message);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    // ── Username → reels grid ───────────────────────────────────────────
+    async function loadReels(username, maxId, append) {
+        setBusy(true);
+        loadMoreBtn.classList.add('d-none');
+        document.getElementById('how-it-works').classList.add('d-none');
+        if (!append) grid.innerHTML = '';
+        grid.insertAdjacentHTML('beforeend', skeletons(append ? 4 : 8));
+
+        try {
+            const res = await fetch('/api/downloader/reels', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, max_id: maxId || '' })
+            });
+            const data = await res.json();
+            removeSkeletons();
+            if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+
+            currentUsername = data.username;
+            nextMaxId = data.next_max_id;
+
+            const header = document.getElementById('profile-header');
+            header.classList.remove('d-none');
+            header.classList.add('d-flex');
+            document.getElementById('profile-username').textContent = '@' + data.username;
+            document.getElementById('profile-open-link').href = 'https://www.instagram.com/' + data.username + '/';
+
+            data.items.forEach(item => {
+                itemsByCode[item.code] = item;
+                grid.insertAdjacentHTML('beforeend', cardHtml(item));
+            });
+            document.getElementById('profile-meta').textContent = grid.children.length + ' reels loaded';
+
+            if (data.has_more && nextMaxId) loadMoreBtn.classList.remove('d-none');
+            if (!append && data.items.length === 0) showAlert('This profile has no public reels.');
+        } catch (err) {
+            removeSkeletons();
+            showAlert(err.message);
+        } finally {
+            setBusy(false);
+        }
+    }
+    function loadMore() { if (currentUsername && nextMaxId) loadReels(currentUsername, nextMaxId, true); }
+
+    function cardHtml(item) {
+        const thumb = item.thumbnail
+            ? `<img class="reel-thumb" src="${esc(item.thumbnail)}" loading="lazy" alt="reel"
+                    onerror="this.parentElement.style.background='linear-gradient(135deg,#2b2f55,#1a1d3a)'; this.remove();">`
+            : '';
+        const stats = item.counts_hidden
+            ? `<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`
+            : `<span class="reel-stat"><i class="bi bi-play-fill"></i> ${fmt(item.play_count)}</span>
+               <span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>
+               <span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`;
+        return `
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="reel-card">
+                <div class="reel-thumb-wrap">
+                    ${thumb}
+                    <div class="reel-overlay">
+                        <button class="reel-play-btn" onclick="openPreview('${esc(item.code)}')" title="Preview">
+                            <i class="bi bi-play-fill"></i>
+                        </button>
+                    </div>
+                    <div class="reel-stats">${stats}</div>
+                </div>
+                ${item.caption ? `<div class="px-2 pt-2 small text-secondary text-truncate" title="${esc(item.caption)}">${esc(item.caption)}</div>` : ''}
+                <div class="p-2 d-flex gap-2">
+                    <button class="btn gradient-btn btn-sm flex-grow-1 btn-download-sm" id="dl-btn-${esc(item.code)}"
+                            onclick="downloadReel('${esc(item.code)}')">
+                        <i class="bi bi-download me-1"></i>Download
+                    </button>
+                    <a class="btn btn-outline-secondary btn-sm" href="${esc(item.post_url)}" target="_blank" rel="noopener" title="Open on Instagram">
+                        <i class="bi bi-instagram"></i>
+                    </a>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // ── Resolve + download helpers ──────────────────────────────────────
+    async function resolveUrl(postUrl) {
+        const res = await fetch('/api/downloader/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: postUrl })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not fetch this media.');
+        return data;
+    }
+    async function resolveCode(code) {
+        if (resolveCache[code]) return resolveCache[code];
+        // If the reels listing already delivered a direct download link,
+        // use it — no extra backend/API round-trip needed.
+        const item = itemsByCode[code];
+        if (item && item.download_url) {
+            resolveCache[code] = {
+                proxied: true,
+                download_url: item.download_url,
+                filename: 'instagram_' + code + '.mp4',
+                title: item.caption || '',
+                quality: item.height ? item.height + 'p' : 'HD',
+            };
+            return resolveCache[code];
+        }
+        const info = await resolveUrl('https://www.instagram.com/reel/' + code + '/');
+        resolveCache[code] = info;
+        return info;
+    }
+    function triggerDownload(info) {
+        const href = info.proxied ? info.download_url : info.direct_url;
+        const a = document.createElement('a');
+        a.href = href;
+        if (info.proxied) a.download = info.filename || 'reel.mp4';
+        else a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    async function downloadReel(code) {
+        const btn = document.getElementById('dl-btn-' + code);
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            triggerDownload(await resolveCode(code));
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved';
+            setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
+        } catch (err) {
+            showAlert(err.message);
+            btn.innerHTML = original;
+            btn.disabled = false;
+        }
+    }
+
+    // ── Preview modal ───────────────────────────────────────────────────
+    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+    const previewVideo = document.getElementById('preview-video');
+    document.getElementById('previewModal').addEventListener('hidden.bs.modal', () => {
+        previewVideo.pause();
+        previewVideo.removeAttribute('src');
+        previewVideo.load();
+    });
+
+    async function openPreview(code) {
+        clearAlert();
+        document.getElementById('preview-title').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading…';
+        document.getElementById('preview-download-btn').classList.add('disabled');
+        previewModal.show();
+        try {
+            const info = await resolveCode(code);
+            const src = info.proxied ? info.download_url : info.direct_url;
+            previewVideo.src = src;
+            previewVideo.play().catch(() => {});
+            document.getElementById('preview-title').innerHTML =
+                '<i class="bi bi-play-circle me-2"></i>' + esc((info.title || 'Reel preview').slice(0, 70));
+            const dlBtn = document.getElementById('preview-download-btn');
+            dlBtn.classList.remove('disabled');
+            dlBtn.onclick = (e) => { e.preventDefault(); triggerDownload(info); };
+        } catch (err) {
+            previewModal.hide();
+            showAlert(err.message);
+        }
+    }
+    </script>
+</body>
+</html>

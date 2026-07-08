@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Posts Analytics - Instagram Analytics Pro{% endblock %}
+{% block page_title %}Posts Performance{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Chart for engagement trend -->
+    <div class="col-lg-12">
+        <div class="glass-card">
+            <h5 class="mb-4">Engagement Distribution (Likes vs Comments)</h5>
+            <div style="height: 250px;">
+                <canvas id="posts-engagement-bar-chart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <h5 class="m-0">Connected Posts History</h5>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary active" id="btn-filter-all" onclick="filterPosts('ALL')">All</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-filter-image" onclick="filterPosts('IMAGE')">Images</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-filter-video" onclick="filterPosts('VIDEO')">Videos/Reels</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-filter-carousel" onclick="filterPosts('CAROUSEL')">Carousels</button>
+    </div>
+</div>
+
+<!-- Posts Grid -->
+<div class="row g-4" id="posts-grid">
+    <div class="col-12 text-center text-muted py-5">
+        No account connected or loading...
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+let engagementChart = null;
+let allPosts = [];
+
+document.addEventListener('activeAccountChanged', (e) => {
+    const acc = e.detail;
+    if (acc && acc.id) {
+        loadPostsData(acc.id);
+    }
+});
+
+document.addEventListener('themeChanged', () => {
+    const activeId = localStorage.getItem('active_account_id');
+    if (activeId) {
+        loadPostsData(activeId);
+    }
+});
+
+async function loadPostsData(accountId) {
+    const token = getAccessToken();
+    try {
+        const response = await fetch(`/api/posts/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            allPosts = data.posts || [];
+            renderPostsGrid(allPosts);
+            renderEngagementChart(allPosts);
+        }
+    } catch (e) {
+        console.error("Failed to load posts data", e);
+    }
+}
+
+function renderPostsGrid(posts) {
+    const grid = document.getElementById('posts-grid');
+    if (!grid) return;
+    
+    if (!posts || posts.length === 0) {
+        grid.innerHTML = '<div class="col-12 text-center text-muted py-5">No posts found for this account.</div>';
+        return;
+    }
+    
+    grid.innerHTML = '';
+    posts.forEach(post => {
+        const col = document.createElement('div');
+        col.className = 'col-md-6 col-lg-4 animate-fade-in';
+        
+        const dateStr = new Date(post.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        
+        // Mock a nice Instagram-like post cover
+        // Use inline HSL backdrop gradients based on post id to make it look premium
+        const randomHue = (post.id * 75) % 360;
+        const fallbackBg = `linear-gradient(135deg, hsl(${randomHue}, 70%, 40%), hsl(${(randomHue + 120) % 360}, 80%, 20%))`;
+        
+        const mediaIcon = post.media_type === 'VIDEO' ? 'play-circle-fill' : post.media_type === 'CAROUSEL' ? 'images' : 'image';
+        
+        col.innerHTML = `
+            <div class="glass-card p-0 overflow-hidden h-100 d-flex flex-column">
+                <!-- Cover Image Stub -->
+                <div class="w-100 d-flex align-items-center justify-content-center text-white position-relative" style="height: 180px; background: ${fallbackBg};">
+                    <span class="fs-1 opacity-70"><i class="bi bi-${mediaIcon}"></i></span>
+                    <span class="position-absolute top-3 right-3 badge bg-dark bg-opacity-70">${post.media_type}</span>
+                </div>
+                
+                <div class="p-3 d-flex flex-column flex-grow-1">
+                    <span class="text-secondary small mb-2"><i class="bi bi-calendar3 me-1"></i>${dateStr}</span>
+                    <p class="small text-truncate-3 flex-grow-1 mb-3" style="min-height: 54px;">
+                        ${post.caption || '<em class="text-muted">No caption provided</em>'}
+                    </p>
+                    
+                    <hr class="my-2 border-card">
+                    
+                    <div class="d-flex align-items-center justify-content-between text-secondary small">
+                        <div><i class="bi bi-heart-fill text-danger me-1"></i><strong>${post.likes.toLocaleString()}</strong></div>
+                        <div><i class="bi bi-chat-fill text-primary me-1"></i><strong>${post.comments.toLocaleString()}</strong></div>
+                        <div><span class="badge badge-glow-secondary">${post.engagement_rate.toFixed(2)}% ER</span></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        grid.appendChild(col);
+    });
+}
+
+function renderEngagementChart(posts) {
+    // Take the 7 most recent posts for readability
+    const recentPosts = [...posts].slice(0, 7).reverse();
+    const labels = recentPosts.map((_, idx) => `Post ${idx + 1}`);
+    const likes = recentPosts.map(p => p.likes);
+    const comments = recentPosts.map(p => p.comments);
+    
+    if (engagementChart) {
+        engagementChart.destroy();
+    }
+    
+    engagementChart = ChartThemeHelper.createDoubleBarChart(
+        'posts-engagement-bar-chart', 
+        labels, 
+        likes, 'Likes', 
+        comments, 'Comments'
+    );
+}
+
+function filterPosts(type) {
+    // Toggle active state on buttons
+    const filters = ['ALL', 'IMAGE', 'VIDEO', 'CAROUSEL'];
+    filters.forEach(f => {
+        const btn = document.getElementById(`btn-filter-${f.toLowerCase()}`);
+        if (btn) {
+            if (f === type) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+    
+    if (type === 'ALL') {
+        renderPostsGrid(allPosts);
+    } else {
+        const filtered = allPosts.filter(p => p.media_type === type);
+        renderPostsGrid(filtered);
+    }
+}
+</script>
+<style>
+.text-truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;  
+    overflow: hidden;
+}
+.top-3 {
+    top: 1rem;
+}
+.right-3 {
+    right: 1rem;
+}
+</style>
+{% endblock %}

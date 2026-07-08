@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Instagram Analytics Pro{% endblock %}</title>
+    
+    <!-- Meta tags for SEO -->
+    <meta name="description" content="Premium Instagram Analytics & Tracking Web Application. Track engagement, followers, posting times, sentiments, and compile AI-powered reports.">
+    
+    <!-- Favicon and Touch Icons -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
+    
+    <!-- Declare support for both light and dark themes -->
+    <meta name="color-scheme" content="light dark">
+    
+    <!-- Avoid Flash of Unstyled Content (FOUC) -->
+    <script>
+    {
+      const colorScheme = localStorage.getItem("color-scheme") || "dark";
+      document.querySelector('meta[name="color-scheme"]').content = colorScheme;
+      document.documentElement.style.colorScheme = colorScheme;
+      document.documentElement.setAttribute("data-bs-theme", colorScheme);
+    }
+    </script>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-logo d-flex align-items-center justify-content-between">
+            <span class="gradient-text"><img src="{{ url_for('static', filename='images/InstaTrackPro_icon.svg') }}" alt="Logo" class="me-2" style="width: 28px; height: 28px;">InstaTrack Pro</span>
+            <button class="sidebar-toggler d-lg-none" onclick="toggleSidebar()"><i class="bi bi-x"></i></button>
+        </div>
+        
+        <ul class="sidebar-menu">
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.dashboard') }}" class="sidebar-link" id="nav-dashboard">
+                    <i class="bi bi-speedometer2"></i><span data-i18n="nav_dashboard">Dashboard</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.followers') }}" class="sidebar-link" id="nav-followers">
+                    <i class="bi bi-people"></i><span data-i18n="nav_followers">Followers</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.posts') }}" class="sidebar-link" id="nav-posts">
+                    <i class="bi bi-grid-3x3-gap"></i><span data-i18n="nav_posts">Posts</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.stories') }}" class="sidebar-link" id="nav-stories">
+                    <i class="bi bi-phone-vibrate"></i><span data-i18n="nav_stories">Stories</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.comments') }}" class="sidebar-link" id="nav-comments">
+                    <i class="bi bi-chat-heart"></i><span data-i18n="nav_comments">Comments & Sentiment</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.ai_features') }}" class="sidebar-link" id="nav-ai">
+                    <i class="bi bi-cpu"></i><span data-i18n="nav_ai">AI Assistant</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.reports') }}" class="sidebar-link" id="nav-reports">
+                    <i class="bi bi-file-earmark-pdf"></i><span data-i18n="nav_reports">PDF Reports</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.downloader') }}" class="sidebar-link" id="nav-downloader">
+                    <i class="bi bi-download"></i><span data-i18n="nav_downloader">Reels Downloader</span>
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="{{ url_for('views.profile') }}" class="sidebar-link" id="nav-profile">
+                    <i class="bi bi-person-gear"></i><span data-i18n="nav_profile">Profile Settings</span>
+                </a>
+            </li>
+            <li class="sidebar-item d-none" id="admin-nav-item">
+                <a href="{{ url_for('views.admin') }}" class="sidebar-link text-danger" id="nav-admin">
+                    <i class="bi bi-shield-lock-fill"></i><span data-i18n="nav_admin">Admin Console</span>
+                </a>
+            </li>
+        </ul>
+        
+        <div class="position-absolute bottom-0 start-0 w-100 p-3 sidebar-footer">
+            <div class="glass-card p-3 d-flex align-items-center justify-content-between mb-2">
+                <div class="text-truncate">
+                    <div class="fw-bold small text-truncate" id="user-email-display">Guest</div>
+                    <div class="text-muted small text-truncate" id="user-role-display">Viewer</div>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="logout()"><i class="bi bi-box-arrow-right"></i></button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper" id="main-wrapper">
+        
+        <!-- Header -->
+        <header class="main-header">
+            <div class="d-flex align-items-center gap-3">
+                <button class="sidebar-toggler" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+                <h4 class="m-0 d-none d-md-block" id="page-title">{% block page_title %}Dashboard{% endblock %}</h4>
+            </div>
+            
+            <div class="d-flex align-items-center gap-3">
+                <!-- Reels Downloader quick access (visible on every page) -->
+                <a href="{{ url_for('views.downloader') }}" class="btn btn-sm gradient-btn d-flex align-items-center gap-1"
+                   id="header-downloader-btn" title="Download Instagram Reels — free, no login">
+                    <i class="bi bi-download"></i>
+                    <span class="d-none d-md-inline" data-i18n="nav_downloader">Reels Downloader</span>
+                </a>
+
+                <!-- Connected Instagram Account Selector -->
+                <div class="dropdown" id="account-selector-container">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-2" type="button" id="accountSelector" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-instagram"></i> <span id="active-account-name" data-i18n="btn_select_account">Select Account</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-card" id="account-selector-list">
+                        <li><a class="dropdown-item text-muted disabled" href="#" data-i18n="lbl_no_accounts">No accounts linked</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-primary fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#linkAccountModal"><i class="bi bi-plus-circle me-2"></i><span data-i18n="btn_link_account">Link Account</span></a></li>
+                    </ul>
+                </div>
+
+                <!-- Sync Now button (visible only for real accounts) -->
+                <button class="btn btn-sm btn-outline-success d-none" id="sync-now-btn" onclick="syncNow()" title="Sync from Instagram API">
+                    <i class="bi bi-arrow-repeat" id="sync-icon"></i>
+                    <span class="d-none d-md-inline ms-1">Sync</span>
+                </button>
+                
+                <!-- Language Switcher -->
+                <div class="dropdown hover-dropdown" id="lang-selector-container">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1" type="button" aria-expanded="false" id="lang-btn">
+                        <i class="bi bi-globe"></i> <span id="lang-btn-text">EN</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-card lang-dropdown">
+                        <li><a class="dropdown-item fw-bold" href="#" onclick="changeLanguage('en')">🇺🇸 English (EN)</a></li>
+                        <li><a class="dropdown-item fw-bold" href="#" onclick="changeLanguage('uz')">🇺🇿 O'zbek (UZ)</a></li>
+                        <li><a class="dropdown-item fw-bold" href="#" onclick="changeLanguage('ru')">🇷🇺 Русский (RU)</a></li>
+                    </ul>
+                </div>
+
+                <!-- Dark Mode Toggle Button -->
+                <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="bi bi-sun" id="theme-icon"></i>
+                </button>
+            </div>
+        </header>
+        
+        <!-- Alerts Banner Container -->
+        <div class="px-4 pt-4" id="alert-container"></div>
+        
+        <!-- Main Content Area -->
+        <main class="content-area animate-fade-in">
+            {% block content %}{% endblock %}
+        </main>
+        
+        <!-- Footer -->
+        <footer class="footer py-3 text-center border-top border-card mt-auto" style="background: var(--bg-card);">
+            <div class="container text-muted small">
+                &copy; 2026 Instagram Analytics Pro. All rights reserved. Powered by AI Simulation Engine.
+            </div>
+        </footer>
+    </div>
+
+    <!-- ═══ Link Account Modal (two-tab: Demo / Real OAuth) ═══ -->
+    <div class="modal fade" id="linkAccountModal" tabindex="-1" aria-labelledby="linkAccountModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0 shadow">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="linkAccountModalLabel">
+                        <i class="bi bi-instagram me-2 text-danger"></i>Link Instagram Account
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-2">
+
+                    <!-- Tab Nav -->
+                    <ul class="nav nav-pills nav-fill mb-3" id="linkModalTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="tab-demo" data-bs-toggle="pill"
+                                data-bs-target="#panel-demo" type="button" role="tab">
+                                <i class="bi bi-cpu me-1"></i>Demo Mode
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tab-real" data-bs-toggle="pill"
+                                data-bs-target="#panel-real" type="button" role="tab">
+                                <i class="bi bi-instagram me-1"></i>Real Account
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Demo Mode tab -->
+                        <div class="tab-pane fade show active" id="panel-demo" role="tabpanel">
+                            <p class="text-muted small mb-3">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>
+                                Generate realistic simulated data for any username. No real Instagram credentials required.
+                            </p>
+                            <form id="link-account-form">
+                                <div class="mb-3">
+                                    <label for="insta-username" class="form-label">Instagram Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-transparent border-end-0 text-muted">@</span>
+                                        <input type="text" class="form-control form-glass border-start-0 ps-1"
+                                            id="insta-username" placeholder="cristiano" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn gradient-btn w-100" id="connect-btn">
+                                    <i class="bi bi-cpu me-1"></i>Connect Demo Account
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Real OAuth tab -->
+                        <div class="tab-pane fade" id="panel-real" role="tabpanel">
+                            <div class="text-center py-2">
+                                <div class="mb-3">
+                                    <i class="bi bi-shield-check text-success" style="font-size:2.5rem"></i>
+                                </div>
+                                <h6 class="fw-bold">Secure Instagram Login</h6>
+                                <p class="text-muted small mb-4">
+                                    You'll be redirected to Instagram to authorize access. We only request
+                                    <strong>read-only</strong> permissions for insights, media, and comments.
+                                    Your password is never shared with us.
+                                </p>
+                                <div class="d-flex flex-column gap-2 text-start small text-muted mb-4">
+                                    <div><i class="bi bi-check-circle-fill text-success me-2"></i>Follower count &amp; daily changes</div>
+                                    <div><i class="bi bi-check-circle-fill text-success me-2"></i>Post likes, comments, reach, views, saves</div>
+                                    <div><i class="bi bi-check-circle-fill text-success me-2"></i>Story views, replies, completion rate</div>
+                                    <div><i class="bi bi-check-circle-fill text-success me-2"></i>Audience demographics (age, gender, location)</div>
+                                    <div><i class="bi bi-check-circle-fill text-success me-2"></i>Profile reach &amp; profile views per day</div>
+                                </div>
+                                <button class="btn w-100 fw-bold" id="oauth-connect-btn"
+                                    onclick="connectRealInstagram()"
+                                    style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border:0;">
+                                    <i class="bi bi-instagram me-2"></i>Continue with Instagram
+                                </button>
+                                <p class="text-muted mt-2" style="font-size:11px;">Requires a Business or Creator account</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Base Core Application JS -->
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
+

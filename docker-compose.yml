@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: insta-analytics-db
+    environment:
+      POSTGRES_USER: insta_user
+      POSTGRES_PASSWORD: insta_pass
+      POSTGRES_DB: insta_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: insta-analytics-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  web:
+    build: .
+    container_name: insta-analytics-web
+    command: gunicorn --bind 0.0.0.0:5001 --workers 2 run:app
+    volumes:
+      - .:/app
+    ports:
+      - "5001:5001"
+    environment:
+      - DATABASE_URL=postgresql://insta_user:insta_pass@db:5432/insta_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - USE_CELERY=True
+      - INSTAGRAM_SIMULATE=True
+      - DEBUG=True
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-4-8}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:-}
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+  celery_worker:
+    build: .
+    container_name: insta-analytics-celery
+    command: celery -A celery_worker.celery worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://insta_user:insta_pass@db:5432/insta_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - USE_CELERY=True
+      - INSTAGRAM_SIMULATE=True
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-4-8}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:-}
+    depends_on:
+      - redis
+      - db
+    restart: always
+
+  celery_beat:
+    build: .
+    container_name: insta-analytics-beat
+    command: celery -A celery_worker.celery beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://insta_user:insta_pass@db:5432/insta_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - USE_CELERY=True
+      - INSTAGRAM_SIMULATE=True
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:-}
+    depends_on:
+      - redis
+      - db
+    restart: always
+
+volumes:
+  postgres_data:

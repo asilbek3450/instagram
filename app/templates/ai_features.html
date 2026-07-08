@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}AI Analytics - Instagram Analytics Pro{% endblock %}
+{% block page_title %}AI Assistant & Recommendations{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Growth Forecast -->
+    <div class="col-lg-7">
+        <div class="glass-card h-100">
+            <h5 class="mb-3"><i class="bi bi-graph-up-arrow text-primary me-2"></i><span data-i18n="ai_forecast_title">AI 7-Day Followers Growth Forecast</span></h5>
+            <p class="text-muted small" data-i18n="ai_forecast_desc">Based on posting frequencies, historical patterns, and comment sentiments, our predictive model projects your growth curve over the next week.</p>
+            <div style="height: 250px;">
+                <canvas id="forecast-chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Best posting times -->
+    <div class="col-lg-5">
+        <div class="glass-card h-100">
+            <h5 class="mb-3"><i class="bi bi-clock-history text-secondary me-2"></i><span data-i18n="ai_posting_title">Ideal Posting Times</span></h5>
+            <p class="text-muted small" data-i18n="ai_posting_desc">Post during these windows to maximize early engagement spikes, feeding the Instagram algorithm positive signals.</p>
+            
+            <div class="mt-4" id="posting-times-container">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                    <p class="small mt-2 mb-0">Calculating best slots...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Hashtag suggestions generator -->
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-3"><i class="bi bi-hash text-success me-2"></i><span data-i18n="ai_hashtag_title">Smart Hashtag Generator</span></h5>
+            <p class="text-muted small" data-i18n="ai_hashtag_desc">Enter a core topic keyword to generate matching trending tags, grouped by popularity tier (High/Med/Low search volume) to maximize discoverability.</p>
+            
+            <form id="hashtag-form" class="mt-3">
+                <div class="input-group">
+                    <input type="text" class="form-control form-glass" id="hashtag-keyword" placeholder="e.g. fitness, tech, food" required>
+                    <button type="submit" class="btn gradient-btn"><i class="bi bi-stars me-1"></i>Generate</button>
+                </div>
+            </form>
+            
+            <div class="mt-4 d-none" id="hashtag-results-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="m-0 font-weight-bold">Generated Tags</h6>
+                    <button class="btn btn-xs btn-outline-secondary py-0.5 px-2 small" onclick="copyHashtags()"><i class="bi bi-copy me-1"></i>Copy All</button>
+                </div>
+                <div id="hashtag-badges" class="d-flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI Content Topic ideas -->
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-3"><i class="bi bi-lightbulb text-warning me-2"></i><span data-i18n="ai_topics_title">AI Content Topic Suggestions</span></h5>
+            <p class="text-muted small" data-i18n="ai_topics_desc">Recommended video and carousel ideas tailored specifically to your active niche demographic.</p>
+            
+            <div class="list-group list-group-flush bg-transparent mt-4" id="content-suggestions-container">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                    <p class="small mt-2 mb-0">Analyzing niche topics...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+let forecastChart = null;
+
+document.addEventListener('activeAccountChanged', (e) => {
+    const acc = e.detail;
+    if (acc && acc.id) {
+        loadAIData(acc.id);
+    }
+});
+
+document.addEventListener('themeChanged', () => {
+    const activeId = localStorage.getItem('active_account_id');
+    if (activeId) {
+        loadAIData(activeId);
+    }
+});
+
+let currentHashtags = [];
+
+async function loadAIData(accountId) {
+    const token = getAccessToken();
+    try {
+        // 1. Fetch growth predictions
+        const predRes = await fetch(`/api/ai/predictions/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (predRes.ok) {
+            const data = await predRes.json();
+            if (data.predictions && data.predictions.projected_data) {
+                renderForecast(data.predictions.projected_data);
+            }
+        }
+        
+        // 2. Fetch posting times
+        const timesRes = await fetch(`/api/ai/posting-times/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (timesRes.ok) {
+            const data = await timesRes.json();
+            renderPostingTimes(data.times);
+        }
+        
+        // 3. Fetch suggestions & topics
+        const sugRes = await fetch(`/api/ai/suggestions/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (sugRes.ok) {
+            const data = await sugRes.json();
+            if (data.suggestions && data.suggestions.suggestions) {
+                renderTopicSuggestions(data.suggestions.suggestions);
+            }
+        }
+        
+    } catch (e) {
+        console.error("Failed to load AI data", e);
+    }
+}
+
+function renderForecast(projectedData) {
+    const labels = projectedData.map(item => {
+        const date = new Date(item.date);
+        return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    });
+    const values = projectedData.map(item => item.followers);
+    
+    if (forecastChart) {
+        forecastChart.destroy();
+    }
+    
+    const ctx = document.getElementById('forecast-chart');
+    if (ctx) {
+        const colors = ChartThemeHelper.getThemeColors();
+        const options = ChartThemeHelper.getCommonOptions(colors);
+        
+        // Gradient fill
+        const gradientCtx = ctx.getContext('2d');
+        const gradient = gradientCtx.createLinearGradient(0, 0, 0, 250);
+        gradient.addColorStop(0, 'rgba(236, 72, 153, 0.3)'); // Pink
+        gradient.addColorStop(1, 'rgba(236, 72, 153, 0)');
+        
+        forecastChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Projected Followers',
+                    data: values,
+                    borderColor: colors.secondary,
+                    borderWidth: 3,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: colors.secondary,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: options
+        });
+    }
+}
+
+function renderPostingTimes(times) {
+    const container = document.getElementById('posting-times-container');
+    if (!container) return;
+    
+    if (!times || times.length === 0) {
+        container.innerHTML = '<div class="text-muted small">No timing recommendations.</div>';
+        return;
+    }
+    
+    container.innerHTML = '<div class="d-flex flex-column gap-3">';
+    times.forEach(t => {
+        const scorePct = Math.round(t.engagement_multiplier * 100);
+        
+        container.innerHTML += `
+            <div class="d-flex align-items-center justify-content-between p-3 rounded border border-card" style="background: rgba(168,85,247,0.04)">
+                <div>
+                    <strong class="d-block text-primary">${t.day_of_week} at ${t.hour}:00</strong>
+                    <span class="text-secondary small">Niche audience peak activity window</span>
+                </div>
+                <div class="text-end">
+                    <span class="badge badge-glow-success">+${scorePct}% Boost</span>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML += '</div>';
+}
+
+function renderTopicSuggestions(suggestions) {
+    const container = document.getElementById('content-suggestions-container');
+    if (!container) return;
+    
+    if (!suggestions || suggestions.length === 0) {
+        container.innerHTML = '<div class="text-muted small">No topic suggestions found.</div>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    suggestions.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'list-group-item bg-transparent border-0 px-0 py-3 border-top border-card';
+        div.innerHTML = `
+            <div class="d-flex align-items-start gap-3">
+                <span class="fs-4 text-warning"><i class="bi bi-lightbulb-fill"></i></span>
+                <div>
+                    <h6 class="m-0 font-weight-bold">${s.type} - Recommendation</h6>
+                    <p class="small text-secondary mb-1 mt-1">${s.caption}</p>
+                    <span class="badge bg-secondary badge-sm" style="font-size: 10px">${s.reason}</span>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// Hashtag form submit handler
+document.getElementById('hashtag-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const keyword = document.getElementById('hashtag-keyword').value.trim();
+    const token = getAccessToken();
+    
+    if (!keyword) return;
+    
+    try {
+        const response = await fetch('/api/ai/hashtags', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ keyword })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayHashtags(data.hashtags);
+        } else {
+            alert('Failed to generate hashtags');
+        }
+    } catch (err) {
+        console.error("Hashtag generation failed", err);
+    }
+});
+
+function displayHashtags(tags) {
+    const container = document.getElementById('hashtag-results-container');
+    const badgesDiv = document.getElementById('hashtag-badges');
+    
+    if (!container || !badgesDiv) return;
+    
+    currentHashtags = tags;
+    badgesDiv.innerHTML = '';
+    tags.forEach(t => {
+        const span = document.createElement('span');
+        span.className = 'badge badge-glow-primary fs-6 py-2 px-3 cursor-pointer m-1';
+        span.innerHTML = `<span class="fw-bold">${t.hashtag}</span> <small class="opacity-75" style="font-size: 10px">${t.reach_volume}</small>`;
+        span.onclick = () => copyText(t.hashtag);
+        badgesDiv.appendChild(span);
+    });
+    
+    container.classList.remove('d-none');
+}
+
+function copyHashtags() {
+    if (currentHashtags.length === 0) return;
+    const text = currentHashtags.map(t => t.hashtag).join(' ');
+    copyText(text);
+}
+
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showAlert('success', 'Hashtags copied to clipboard!');
+    }).catch(err => {
+        console.error('Copy failed', err);
+    });
+}
+</script>
+<style>
+.cursor-pointer {
+    cursor: pointer;
+}
+.cursor-pointer:hover {
+    filter: brightness(1.2);
+}
+</style>
+{% endblock %}

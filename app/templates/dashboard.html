@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Instagram Analytics Pro{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<!-- Reels Downloader promo banner -->
+<div class="glass-card mb-4 p-3 p-md-4 d-flex align-items-center justify-content-between flex-wrap gap-3"
+     style="background: linear-gradient(120deg, hsla(var(--hue-primary),85%,60%,.12), hsla(var(--hue-secondary),85%,60%,.12)); border: 1px solid hsla(var(--hue-primary),85%,60%,.25);">
+    <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center justify-content-center rounded-4"
+             style="width: 52px; height: 52px; background: linear-gradient(135deg, hsl(var(--hue-primary),85%,60%), hsl(var(--hue-secondary),85%,60%)); color: #fff;">
+            <i class="bi bi-download fs-4"></i>
+        </div>
+        <div>
+            <h6 class="fw-bold mb-1">Reels Downloader <span class="badge badge-glow-success ms-1">Free</span></h6>
+            <span class="text-secondary small">Download any public reel or video in HD — no Instagram login needed.</span>
+        </div>
+    </div>
+    <a href="{{ url_for('views.downloader') }}" class="btn gradient-btn px-4 fw-bold">
+        <i class="bi bi-download me-2"></i>Open Downloader
+    </a>
+</div>
+
+<!-- KPI Metrics Grid -->
+<div class="analytics-grid" id="kpi-grid">
+    <!-- Followers -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold" data-i18n="dash_total_followers">Total Followers</span>
+            <span class="badge badge-glow-primary"><i class="bi bi-people-fill"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-followers">-</div>
+        <div class="kpi-trend positive" id="kpi-followers-trend"><i class="bi bi-arrow-up-right me-1"></i>0.0%</div>
+        <span class="text-muted small" data-i18n="dash_vs_last_month">vs last month</span>
+    </div>
+    
+    <!-- Engagement Rate -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold" data-i18n="dash_engagement_rate">Engagement Rate</span>
+            <span class="badge badge-glow-secondary"><i class="bi bi-heart-pulse-fill"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-engagement">-</div>
+        <div class="kpi-trend positive" id="kpi-engagement-trend"><i class="bi bi-arrow-up-right me-1"></i>0.0%</div>
+        <span class="text-muted small" data-i18n="dash_vs_last_month">vs last month</span>
+    </div>
+
+    <!-- Reach -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold" data-i18n="dash_monthly_reach">Monthly Reach</span>
+            <span class="badge badge-glow-success"><i class="bi bi-eye-fill"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-reach">-</div>
+        <div class="kpi-trend positive" id="kpi-reach-trend"><i class="bi bi-arrow-up-right me-1"></i>0.0%</div>
+        <span class="text-muted small" data-i18n="dash_vs_last_month">vs last month</span>
+    </div>
+
+    <!-- Impression -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold" data-i18n="dash_impressions">Impressions</span>
+            <span class="badge badge-glow-primary"><i class="bi bi-graph-up"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-impressions">-</div>
+        <div class="kpi-trend positive" id="kpi-impressions-trend"><i class="bi bi-arrow-up-right me-1"></i>0.0%</div>
+        <span class="text-muted small" data-i18n="dash_vs_last_month">vs last month</span>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Chart Column -->
+    <div class="col-lg-8">
+        <div class="glass-card h-100">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="m-0" data-i18n="dash_growth_history">Followers History (Last 30 Days)</h5>
+                <select class="form-select form-glass py-1 px-2 small" style="width: auto" id="chart-days-select">
+                    <option value="7">7 Days</option>
+                    <option value="15">15 Days</option>
+                    <option value="30" selected>30 Days</option>
+                </select>
+            </div>
+            <div style="height: 320px;">
+                <canvas id="followers-growth-chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI Quick Insights -->
+    <div class="col-lg-4">
+        <div class="glass-card h-100 d-flex flex-column">
+            <h5 class="mb-3"><i class="bi bi-stars text-primary me-2"></i><span data-i18n="dash_ai_copilot">AI Copilot Insights</span></h5>
+            <div class="flex-grow-1" id="ai-quick-insights">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                    <p class="small mb-0">Analyzing account statistics...</p>
+                </div>
+            </div>
+            <a href="/ai-features" class="btn btn-sm btn-outline-primary mt-3 w-100">Explore AI Assistant</a>
+        </div>
+    </div>
+</div>
+
+<!-- Top Posts & Engagement Breakdown -->
+<div class="row g-4">
+    <div class="col-lg-12">
+        <div class="glass-card">
+            <h5 class="mb-4" data-i18n="dash_top_posts">Top Performing Posts</h5>
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr>
+                            <th>Post</th>
+                            <th>Caption</th>
+                            <th>Likes</th>
+                            <th>Comments</th>
+                            <th>Engagement</th>
+                            <th>Published At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="top-posts-table-body">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">No account connected or loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Charts Helper Script -->
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+let growthChart = null;
+
+document.addEventListener('activeAccountChanged', (e) => {
+    const acc = e.detail;
+    if (acc && acc.id) {
+        loadDashboardData(acc.id);
+    }
+});
+
+document.addEventListener('themeChanged', () => {
+    // If account is connected, reload data to re-draw chart with correct theme color
+    const activeId = localStorage.getItem('active_account_id');
+    if (activeId) {
+        loadDashboardData(activeId);
+    }
+});
+
+// Listener for chart range filter
+document.getElementById('chart-days-select').addEventListener('change', () => {
+    const activeId = localStorage.getItem('active_account_id');
+    if (activeId) {
+        loadDashboardData(activeId);
+    }
+});
+
+async function loadDashboardData(accountId) {
+    const token = getAccessToken();
+    const days = document.getElementById('chart-days-select').value;
+    
+    try {
+        // 1. Fetch Overview (KPIs and quick stats)
+        const overviewRes = await fetch(`/api/analytics/overview/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (overviewRes.ok) {
+            const data = await overviewRes.json();
+            updateKPIs(data.overview);
+        }
+        
+        // 2. Fetch Growth data for the chart
+        const growthRes = await fetch(`/api/analytics/growth/${accountId}?days=${days}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (growthRes.ok) {
+            const data = await growthRes.json();
+            renderGrowthChart(data.growth);
+        }
+        
+        // 3. Fetch Top Posts
+        const postsRes = await fetch(`/api/posts/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (postsRes.ok) {
+            const data = await postsRes.json();
+            renderPostsTable(data.posts);
+        }
+        
+        // 4. Fetch AI Suggestions/Insights for Copilot Panel
+        const aiRes = await fetch(`/api/ai/suggestions/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (aiRes.ok) {
+            const data = await aiRes.json();
+            renderAICopilot(data);
+        }
+        
+    } catch (e) {
+        console.error("Dashboard load failed", e);
+    }
+}
+
+function updateKPIs(overview) {
+    const followers  = overview.followers  ?? overview.followers_count ?? 0;
+    const engagement = overview.engagement_rate ?? 0;
+    const reach      = overview.reach ?? 0;
+    const impressions = overview.impressions ?? 0;
+    const followersChange = overview.followers_change ?? overview.growth_percentage ?? 0;
+
+    const kpiMap = {
+        'kpi-followers':  followers.toLocaleString(),
+        'kpi-engagement': `${engagement.toFixed(2)}%`,
+        'kpi-reach':      reach.toLocaleString(),
+        'kpi-impressions': impressions.toLocaleString(),
+    };
+    for (const [id, value] of Object.entries(kpiMap)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    const trendMap = {
+        'kpi-followers-trend':   followersChange,
+        'kpi-engagement-trend':  2.4,
+        'kpi-reach-trend':       5.7,
+        'kpi-impressions-trend': 4.1
+    };
+    for (const [id, trend] of Object.entries(trendMap)) {
+        const el = document.getElementById(id);
+        if (el) {
+            const val = trend >= 0 ? `+${trend.toFixed(1)}%` : `${trend.toFixed(1)}%`;
+            el.innerHTML = `<i class="bi ${trend >= 0 ? 'bi-arrow-up-right' : 'bi-arrow-down-left'} me-1"></i>${val}`;
+            el.className = `kpi-trend ${trend >= 0 ? 'positive' : 'negative'}`;
+        }
+    }
+}
+
+function renderGrowthChart(growthData) {
+    const labels = growthData.map(item => {
+        const date = new Date(item.date);
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    });
+    const values = growthData.map(item => item.followers);
+    
+    if (growthChart) {
+        growthChart.destroy();
+    }
+    
+    growthChart = ChartThemeHelper.createLineChart('followers-growth-chart', labels, values, 'Followers');
+}
+
+function renderPostsTable(posts) {
+    const tbody = document.getElementById('top-posts-table-body');
+    if (!tbody) return;
+    
+    if (!posts || posts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No posts available.</td></tr>';
+        return;
+    }
+    
+    // Sort by likes + comments or engagement rate
+    const topPosts = [...posts].sort((a,b) => b.engagement_rate - a.engagement_rate).slice(0, 5);
+    
+    tbody.innerHTML = '';
+    topPosts.forEach(post => {
+        const tr = document.createElement('tr');
+        const formattedDate = new Date(post.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        const mediaIcon = {
+            'VIDEO':          '<i class="bi bi-play-circle me-1 text-danger"></i>',
+            'CAROUSEL_ALBUM': '<i class="bi bi-images me-1 text-primary"></i>',
+            'CAROUSEL':       '<i class="bi bi-images me-1 text-primary"></i>',
+        };
+        const mediaTag = mediaIcon[post.media_type] || '<i class="bi bi-image me-1 text-success"></i>';
+        const likes    = (post.likes ?? post.likes_count ?? 0);
+        const comments = (post.comments ?? post.comments_count ?? 0);
+        const er       = (post.engagement_rate ?? 0);
+        
+        tr.innerHTML = `
+            <td>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fs-4">${mediaTag}</span>
+                    <span class="small font-monospace text-muted">${post.media_type}</span>
+                </div>
+            </td>
+            <td>
+                <div class="text-truncate" style="max-width: 250px;" title="${post.caption || ''}">
+                    ${post.caption || '<span class="text-muted small">No caption</span>'}
+                </div>
+            </td>
+            <td><strong>${likes.toLocaleString()}</strong></td>
+            <td><strong>${comments.toLocaleString()}</strong></td>
+            <td>
+                <span class="badge badge-glow-secondary">${er.toFixed(2)}%</span>
+            </td>
+            <td class="small text-secondary">${formattedDate}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderAICopilot(data) {
+    const container = document.getElementById('ai-quick-insights');
+    if (!container) return;
+    
+    const suggestions = data.suggestions ? data.suggestions.suggestions : [];
+    const insights = data.insights || {};
+    
+    let html = '<div class="list-group list-group-flush bg-transparent">';
+    
+    if (insights.growth_sentiment) {
+        html += `
+            <div class="list-group-item bg-transparent border-0 px-0 pb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-graph-up-arrow text-success"></i>
+                    <h6 class="m-0 font-weight-bold text-success">Growth Vibe</h6>
+                </div>
+                <div class="small text-secondary">${insights.growth_sentiment}</div>
+            </div>
+        `;
+    }
+    
+    if (insights.ideal_posting_hours && insights.ideal_posting_hours.length > 0) {
+        const time = insights.ideal_posting_hours[0];
+        html += `
+            <div class="list-group-item bg-transparent border-0 px-0 py-3 border-top border-card">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-clock-history text-primary"></i>
+                    <h6 class="m-0 font-weight-bold">Timing Hint</h6>
+                </div>
+                <div class="small text-secondary">Your active audience peak is forecasted around <strong>${time}</strong>. Post then to maximize reach.</div>
+            </div>
+        `;
+    }
+    
+    if (suggestions.length > 0) {
+        html += `
+            <div class="list-group-item bg-transparent border-0 px-0 py-3 border-top border-card">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-lightbulb text-warning"></i>
+                    <h6 class="m-0 font-weight-bold">Quick Hack (${suggestions[0].type})</h6>
+                </div>
+                <div class="small text-secondary">${suggestions[0].caption}</div>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+</script>
+{% endblock %}

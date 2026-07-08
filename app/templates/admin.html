@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Console - Instagram Analytics Pro{% endblock %}
+{% block page_title %}Administrative Console{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- System Status Overview -->
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-4">System Status & Environment</h5>
+            <div class="table-responsive">
+                <table class="table table-glass table-hover align-middle small mb-0">
+                    <tbody id="system-stats-tbody">
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                Querying environment metadata...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick stats counts -->
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-4">Analytics Engine Summary Counts</h5>
+            <div class="row text-center my-auto py-3">
+                <div class="col-4 border-end border-card">
+                    <div class="display-6 fw-bold text-primary" id="count-users">-</div>
+                    <span class="text-secondary small">Total Users</span>
+                </div>
+                <div class="col-4 border-end border-card">
+                    <div class="display-6 fw-bold text-secondary" id="count-accounts">-</div>
+                    <span class="text-secondary small">Linked Profiles</span>
+                </div>
+                <div class="col-4">
+                    <div class="display-6 fw-bold text-success" id="count-reports">-</div>
+                    <span class="text-secondary small">PDFs Compiled</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- User Management Table -->
+    <div class="col-12">
+        <div class="glass-card">
+            <h5 class="mb-4">User Account Management</h5>
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Email Address</th>
+                            <th>Role Access</th>
+                            <th>Verified</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-tbody">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No users loaded.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Audit Viewer -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="glass-card">
+            <h5 class="mb-4"><i class="bi bi-terminal me-2 text-primary"></i>System Audit Logs</h5>
+            <div class="p-3 bg-dark rounded font-monospace text-light small border border-card" style="max-height: 250px; overflow-y: auto;" id="system-logs-container">
+                [SYSTEM LOGS LOADING...]
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Double check admin privileges client side, then load logs
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+        window.location.href = '/dashboard';
+        return;
+    }
+    
+    loadSystemStatus();
+    loadUsersList();
+    loadSystemLogs();
+});
+
+async function loadSystemStatus() {
+    const token = getAccessToken();
+    try {
+        const response = await fetch('/api/admin/system-status', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderSystemStats(data.status);
+        } else {
+            console.error("Admin check failed");
+        }
+    } catch (e) {
+        console.error("Connection error loading status", e);
+    }
+}
+
+function renderSystemStats(status) {
+    const tbody = document.getElementById('system-stats-tbody');
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr>
+                <td><strong>Operating System</strong></td>
+                <td><span class="badge badge-glow-primary">${status.platform} (${status.platform_release})</span></td>
+            </tr>
+            <tr>
+                <td><strong>Python Runtime</strong></td>
+                <td><span class="text-secondary font-monospace">${status.python_version.split('[')[0]}</span></td>
+            </tr>
+            <tr>
+                <td><strong>Database Layer</strong></td>
+                <td><span class="text-secondary">${status.database}</span></td>
+            </tr>
+            <tr>
+                <td><strong>Celery/Redis Connection</strong></td>
+                <td><span class="badge badge-glow-success">${status.redis_status}</span></td>
+            </tr>
+        `;
+    }
+    
+    // Update count labels
+    document.getElementById('count-users').textContent = status.counts.users;
+    document.getElementById('count-accounts').textContent = status.counts.instagram_accounts;
+    document.getElementById('count-reports').textContent = status.counts.reports;
+}
+
+async function loadUsersList() {
+    const token = getAccessToken();
+    try {
+        const response = await fetch('/api/admin/users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderUsersTable(data.users);
+        }
+    } catch (e) {
+        console.error("Failed to load users list", e);
+    }
+}
+
+function renderUsersTable(users) {
+    const tbody = document.getElementById('users-table-tbody');
+    if (!tbody) return;
+    
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No users found.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    users.forEach(u => {
+        const tr = document.createElement('tr');
+        
+        const isVerifiedBadge = u.is_verified ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>';
+        
+        // Disable action if this is current logged in admin
+        const curUser = getCurrentUser();
+        const isSelf = curUser && curUser.id == u.id;
+        
+        let selectHtml = `
+            <select class="form-select form-glass py-0.5 px-2 small w-auto d-inline" onchange="changeUserRole(${u.id}, this.value)" ${isSelf ? 'disabled' : ''}>
+                <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+            </select>
+        `;
+        
+        tr.innerHTML = `
+            <td><code>#${u.id}</code></td>
+            <td><strong>${u.email}</strong> ${isSelf ? '<span class="badge bg-info text-dark ms-1">You</span>' : ''}</td>
+            <td>${selectHtml}</td>
+            <td>${isVerifiedBadge}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" ${isSelf ? 'disabled' : ''} onclick="deleteUserStub(${u.id})"><i class="bi bi-trash-fill"></i></button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function changeUserRole(userId, newRole) {
+    const token = getAccessToken();
+    try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ role: newRole })
+        });
+        
+        if (response.ok) {
+            showAlert('success', 'User role updated successfully.');
+            loadUsersList();
+            loadSystemStatus();
+        } else {
+            const data = await response.json();
+            showAlert('danger', data.error || 'Failed to update user role.');
+        }
+    } catch (err) {
+        showAlert('danger', 'Connection error updating user role.');
+    }
+}
+
+async function deleteUserStub(userId) {
+    alert("Delete account is a placeholder admin function in this demo.");
+}
+
+async function loadSystemLogs() {
+    const token = getAccessToken();
+    try {
+        const response = await fetch('/api/admin/logs', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const container = document.getElementById('system-logs-container');
+            if (container) {
+                container.innerHTML = '';
+                data.logs.forEach(log => {
+                    const line = document.createElement('div');
+                    line.className = 'py-1 border-bottom border-secondary border-opacity-10';
+                    line.innerHTML = `<span class="text-info">[${log.timestamp}]</span> <span class="text-warning">${log.level}</span>: ${log.message}`;
+                    container.appendChild(line);
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load logs", e);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,226 @@
+# Russian translations for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-07-08 18:04+0500\n"
+"PO-Revision-Date: 2026-07-08 18:04+0500\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: ru\n"
+"Language-Team: ru <LL@li.org>\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: app/templates/landing.html:43
+msgid "Features"
+msgstr "Функции"
+
+#: app/templates/landing.html:44
+msgid "Pricing"
+msgstr "Цены"
+
+#: app/templates/landing.html:45
+msgid "Reels Downloader"
+msgstr "Скачать Reels"
+
+#: app/templates/landing.html:66
+msgid "Sign In"
+msgstr "Войти"
+
+#: app/templates/landing.html:67
+msgid "Get Started"
+msgstr "Начать"
+
+#: app/templates/landing.html:77
+msgid "AI-Powered Analytics"
+msgstr "Аналитика на базе ИИ"
+
+#: app/templates/landing.html:79
+msgid "Grow Your Instagram"
+msgstr "Развивайте свой Instagram"
+
+#: app/templates/landing.html:79
+msgid "Scientifically"
+msgstr "Научно"
+
+#: app/templates/landing.html:82
+msgid ""
+"InstaTrack Pro gives you deep, actionable insights on your followers, "
+"engagement metrics, comment sentiment, and predictive AI recommendations."
+" Stop guessing and start growing."
+msgstr "InstaTrack Pro предоставляет глубокую аналитику о ваших подписчиках, вовлеченности, настроении комментариев и рекомендации ИИ. Хватит гадать, начинайте расти."
+
+#: app/templates/landing.html:85
+msgid "Start Free Trial"
+msgstr "Начать бесплатно"
+
+#: app/templates/landing.html:86
+msgid "See Features"
+msgstr "Смотреть функции"
+
+#: app/templates/landing.html:99
+msgid "Simulated Feed"
+msgstr "Симуляция ленты"
+
+#: app/templates/landing.html:108
+msgid "Followers"
+msgstr "Подписчики"
+
+#: app/templates/landing.html:112
+msgid "Engagement"
+msgstr "Вовлеченность"
+
+#: app/templates/landing.html:116
+msgid "Positive Sent."
+msgstr "Позитивные отзывы"
+
+#: app/templates/landing.html:123
+msgid "AI Growth Prediction"
+msgstr "Прогноз роста ИИ"
+
+#: app/templates/landing.html:126
+msgid "Based on your high engagement posting window at"
+msgstr "Основано на вашем активном времени публикации"
+
+#: app/templates/landing.html:126
+msgid "7:00 PM Thursday"
+msgstr "Четверг 19:00"
+
+#: app/templates/landing.html:126
+msgid "you are projected to gain"
+msgstr "вы прогнозируемо получите"
+
+#: app/templates/landing.html:126
+msgid "+1,250 followers"
+msgstr "+1,250 подписчиков"
+
+#: app/templates/landing.html:126
+msgid "in the next 7 days."
+msgstr "за следующие 7 дней."
+
+#: app/templates/landing.html:138
+msgid "Enterprise-Grade Features"
+msgstr "Функции корпоративного уровня"
+
+#: app/templates/landing.html:139
+msgid ""
+"Track everything you need to know about your Instagram profile with "
+"state-of-the-art tools."
+msgstr "Отслеживайте всё, что нужно знать о вашем профиле Instagram с помощью современных инструментов."
+
+#: app/templates/landing.html:146
+msgid "Historical Growth Tracking"
+msgstr "Историческое отслеживание роста"
+
+#: app/templates/landing.html:147
+msgid ""
+"Understand daily growth trends, demographics breakdown by gender and "
+"country, and benchmark accounts."
+msgstr "Понимайте ежедневные тренды роста, демографию по полу и стране."
+
+#: app/templates/landing.html:153
+msgid "Sentiment & Spam Audit"
+msgstr "Аудит настроений и спама"
+
+#: app/templates/landing.html:154
+msgid ""
+"Perform deep natural language checks on post comments. Easily filter "
+"spam, negativity, and promotional bots."
+msgstr "Выполняйте глубокую проверку комментариев. Легко фильтруйте спам, негатив и ботов."
+
+#: app/templates/landing.html:160
+msgid "PDF Reports Compiler"
+msgstr "Компилятор PDF-отчетов"
+
+#: app/templates/landing.html:161
+msgid ""
+"Automatically compile weekly/monthly performance reports. Ideal for "
+"digital marketing agencies and influencers."
+msgstr "Автоматически создавайте еженедельные и ежемесячные отчеты. Идеально для агентств и инфлюенсеров."
+
+#: app/templates/landing.html:172
+msgid "Simple, Transparent Pricing"
+msgstr "Простые, прозрачные цены"
+
+#: app/templates/landing.html:173
+msgid ""
+"Flexible plans for content creators, managers, and enterprise "
+"organizations."
+msgstr "Гибкие планы для авторов контента, менеджеров и корпоративных организаций."
+
+#: app/templates/landing.html:180
+msgid "Free Starter"
+msgstr "Бесплатный"
+
+#: app/templates/landing.html:183 app/templates/landing.html:202
+msgid "month"
+msgstr "месяц"
+
+#: app/templates/landing.html:186
+msgid "1 Instagram Account"
+msgstr "1 аккаунт Instagram"
+
+#: app/templates/landing.html:187
+msgid "7-Day Growth Metrics"
+msgstr "Метрики роста за 7 дней"
+
+#: app/templates/landing.html:188
+msgid "Basic Post Analytics"
+msgstr "Базовая аналитика постов"
+
+#: app/templates/landing.html:189
+msgid "AI Suggestions"
+msgstr "Рекомендации ИИ"
+
+#: app/templates/landing.html:190
+msgid "PDF Reports Export"
+msgstr "Экспорт PDF отчетов"
+
+#: app/templates/landing.html:192
+msgid "Sign Up Free"
+msgstr "Зарегистрироваться бесплатно"
+
+#: app/templates/landing.html:198
+msgid "Most Popular"
+msgstr "Самый популярный"
+
+#: app/templates/landing.html:199
+msgid "Pro Influencer"
+msgstr "Pro Influencer"
+
+#: app/templates/landing.html:205
+msgid "5 Instagram Accounts"
+msgstr "5 аккаунтов Instagram"
+
+#: app/templates/landing.html:206
+msgid "30-Day Growth History"
+msgstr "История роста за 30 дней"
+
+#: app/templates/landing.html:207
+msgid "Full Sentiment/Spam Audit"
+msgstr "Полный аудит спама/настроений"
+
+#: app/templates/landing.html:208
+msgid "AI Posting Time & Tag Suggestions"
+msgstr "ИИ рекомендации времени публикации"
+
+#: app/templates/landing.html:209
+msgid "PDF Reports & Downloads"
+msgstr "PDF отчеты и загрузки"
+
+#: app/templates/landing.html:211
+msgid "Get Started Pro"
+msgstr "Начать с Pro"
+
+#: app/templates/landing.html:221
+msgid "All rights reserved. Created for research and demo."
+msgstr "Все права защищены. Создано для исследования и демо."
+

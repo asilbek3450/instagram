@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Followers & Analytics - Instagram Analytics Pro{% endblock %}
+{% block page_title %}Followers & Audience Analytics{% endblock %}
+
+{% block content %}
+<!-- KPI Cards -->
+<div class="analytics-grid mb-4" id="followers-kpi-grid">
+    <!-- Total Followers -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold">Total Followers</span>
+            <span class="badge badge-glow-primary"><i class="bi bi-people-fill"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-followers-total">-</div>
+        <div class="kpi-trend positive" id="kpi-net30-trend"><i class="bi bi-arrow-up-right me-1"></i>30d change</div>
+        <span class="text-muted small">vs 30 days ago</span>
+    </div>
+
+    <!-- Gained Today -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold">Gained Today</span>
+            <span class="badge" style="background: rgba(34,197,94,.15); color:#22c55e;"><i class="bi bi-person-plus-fill"></i></span>
+        </div>
+        <div class="kpi-value" style="color: #22c55e;" id="kpi-gained-today">-</div>
+        <div class="text-muted small">new followers today</div>
+    </div>
+
+    <!-- Lost Today -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold">Unfollowed Today</span>
+            <span class="badge" style="background: rgba(239,68,68,.15); color:#ef4444;"><i class="bi bi-person-dash-fill"></i></span>
+        </div>
+        <div class="kpi-value" style="color: #ef4444;" id="kpi-lost-today">-</div>
+        <div class="text-muted small">unfollows today</div>
+    </div>
+
+    <!-- 7-day net -->
+    <div class="glass-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <span class="text-secondary small fw-bold">Net Change (7d)</span>
+            <span class="badge badge-glow-secondary"><i class="bi bi-calendar-week"></i></span>
+        </div>
+        <div class="kpi-value" id="kpi-net-7d">-</div>
+        <div class="kpi-trend positive" id="kpi-net7d-trend"></div>
+        <span class="text-muted small">last 7 days</span>
+    </div>
+</div>
+
+<!-- Follower Growth Chart + Following count -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="glass-card h-100">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="m-0">Followers Gained &amp; Lost (Daily)</h5>
+                <select class="form-select form-glass py-1 px-2 small" style="width:auto" id="followers-chart-days">
+                    <option value="7">7 Days</option>
+                    <option value="14">14 Days</option>
+                    <option value="30" selected>30 Days</option>
+                </select>
+            </div>
+            <div style="height:300px;">
+                <canvas id="followers-gainloss-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="glass-card h-100">
+            <h5 class="mb-4">Follower Total Trend</h5>
+            <div style="height:300px;">
+                <canvas id="followers-total-chart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Demographics Row -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-4" data-i18n="foll_gender_split">Gender Distribution</h5>
+            <div style="height:260px;">
+                <canvas id="gender-demographics-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="glass-card h-100">
+            <h5 class="mb-4" data-i18n="foll_age_dist">Age Distribution</h5>
+            <div style="height:260px;">
+                <canvas id="age-demographics-chart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Countries + Cities -->
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="glass-card h-100">
+            <h5 class="mb-4" data-i18n="foll_top_countries">Top Countries of Your Audience</h5>
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr>
+                            <th>Country</th>
+                            <th>Share</th>
+                            <th>Visual</th>
+                        </tr>
+                    </thead>
+                    <tbody id="countries-table-body">
+                        <tr><td colspan="3" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="glass-card h-100">
+            <h5 class="mb-4" data-i18n="foll_top_cities">Top Cities</h5>
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr><th>City</th><th>Share</th></tr>
+                    </thead>
+                    <tbody id="cities-table-body">
+                        <tr><td colspan="2" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+let gainLossChart = null;
+let totalChart = null;
+let genderChart = null;
+let ageChart = null;
+
+document.addEventListener('activeAccountChanged', (e) => {
+    if (e.detail && e.detail.id) loadFollowersData(e.detail.id);
+});
+document.addEventListener('themeChanged', () => {
+    const id = localStorage.getItem('active_account_id');
+    if (id) loadFollowersData(id);
+});
+document.getElementById('followers-chart-days').addEventListener('change', () => {
+    const id = localStorage.getItem('active_account_id');
+    if (id) loadFollowersData(id);
+});
+
+async function loadFollowersData(accountId) {
+    const token = getAccessToken();
+    try {
+        const res = await fetch(`/api/analytics/audience/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const aud = data.audience;
+
+        // KPIs
+        const net30 = aud.net_30d || 0;
+        const net7 = aud.net_7d || 0;
+        const gained = aud.gained_today || 0;
+        const lost = aud.lost_today || 0;
+
+        setEl('kpi-followers-total', (aud.followers_count || 0).toLocaleString());
+        setEl('kpi-gained-today', '+' + gained.toLocaleString());
+        setEl('kpi-lost-today', '-' + lost.toLocaleString());
+        setEl('kpi-net-7d', (net7 >= 0 ? '+' : '') + net7.toLocaleString());
+
+        // 30d trend badge
+        const trend30El = document.getElementById('kpi-net30-trend');
+        if (trend30El) {
+            const sign = net30 >= 0 ? '+' : '';
+            trend30El.innerHTML = `<i class="bi ${net30 >= 0 ? 'bi-arrow-up-right' : 'bi-arrow-down-left'} me-1"></i>${sign}${net30.toLocaleString()}`;
+            trend30El.className = `kpi-trend ${net30 >= 0 ? 'positive' : 'negative'}`;
+        }
+        const trend7El = document.getElementById('kpi-net7d-trend');
+        if (trend7El) {
+            trend7El.innerHTML = `<i class="bi ${net7 >= 0 ? 'bi-arrow-up-right' : 'bi-arrow-down-left'} me-1"></i>${net7 >= 0 ? '+' : ''}${net7.toLocaleString()} followers`;
+            trend7El.className = `kpi-trend ${net7 >= 0 ? 'positive' : 'negative'}`;
+        }
+
+        // History charts
+        const days = parseInt(document.getElementById('followers-chart-days').value);
+        const history = (aud.history || []).slice(-days);
+        renderGainLossChart(history);
+        renderTotalChart(history);
+
+        // Demographics
+        renderDemoCharts(aud);
+        renderAudienceTables(aud);
+
+    } catch (e) {
+        console.error('Followers data load failed', e);
+    }
+}
+
+function setEl(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function renderGainLossChart(history) {
+    if (gainLossChart) gainLossChart.destroy();
+    const labels = history.map(h => {
+        const d = new Date(h.date);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    });
+    const values = history.map(h => h.gain_loss || 0);
+    const colors = ChartThemeHelper.getThemeColors();
+
+    const ctx = document.getElementById('followers-gainloss-chart');
+    if (!ctx) return;
+
+    gainLossChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Daily Change',
+                data: values,
+                backgroundColor: values.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'),
+                borderColor: values.map(v => v >= 0 ? '#22c55e' : '#ef4444'),
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            ...ChartThemeHelper.getCommonOptions(colors),
+            plugins: {
+                ...ChartThemeHelper.getCommonOptions(colors).plugins,
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+function renderTotalChart(history) {
+    if (totalChart) totalChart.destroy();
+    const labels = history.map(h => {
+        const d = new Date(h.date);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    });
+    const values = history.map(h => h.followers_count || h.followers || 0);
+    totalChart = ChartThemeHelper.createLineChart('followers-total-chart', labels, values, 'Total Followers');
+}
+
+function renderDemoCharts(aud) {
+    const colors = ChartThemeHelper.getThemeColors();
+
+    // Gender chart — keys may be 'M'/'F'/'U' or 'male'/'female'/'other'
+    const genderRaw = aud.gender_split || aud.gender_distribution || {};
+    const genderLabels = Object.keys(genderRaw).map(k => {
+        const map = { M: 'Male', F: 'Female', U: 'Unknown', male: 'Male', female: 'Female', other: 'Other' };
+        return map[k] || k;
+    });
+    const genderValues = Object.values(genderRaw);
+
+    if (genderChart) genderChart.destroy();
+    genderChart = ChartThemeHelper.createDoughnutChart('gender-demographics-chart', genderLabels, genderValues);
+
+    // Age chart
+    const ageRaw = aud.age_groups || aud.age_distribution || {};
+    const ageLabels = Object.keys(ageRaw);
+    const ageValues = Object.values(ageRaw);
+
+    if (ageChart) ageChart.destroy();
+    const ageCtx = document.getElementById('age-demographics-chart');
+    if (ageCtx && ageLabels.length) {
+        const opts = ChartThemeHelper.getCommonOptions(colors);
+        opts.indexAxis = 'y';
+        ageChart = new Chart(ageCtx, {
+            type: 'bar',
+            data: {
+                labels: ageLabels,
+                datasets: [{
+                    label: 'Audience Share (%)',
+                    data: ageValues,
+                    backgroundColor: colors.secondary,
+                    borderRadius: 6
+                }]
+            },
+            options: opts
+        });
+    }
+}
+
+function renderAudienceTables(aud) {
+    // Countries
+    const countryData = aud.top_countries || aud.country_distribution || {};
+    const countryBody = document.getElementById('countries-table-body');
+    if (countryBody) {
+        countryBody.innerHTML = '';
+        const countries = Object.entries(countryData).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        if (!countries.length) {
+            countryBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No demographic data yet.</td></tr>';
+        } else {
+            countries.forEach(([name, val]) => {
+                const pct = typeof val === 'number' && val <= 1 ? (val * 100).toFixed(1) : parseFloat(val).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${name}</strong></td>
+                    <td><span class="badge badge-glow-primary">${pct}%</span></td>
+                    <td>
+                        <div class="progress" style="height:8px;background:var(--border-card);">
+                            <div class="progress-bar gradient-btn" role="progressbar" style="width:${pct}%;border-radius:4px;"></div>
+                        </div>
+                    </td>
+                `;
+                countryBody.appendChild(tr);
+            });
+        }
+    }
+
+    // Cities
+    const cityData = aud.top_cities || aud.city_distribution || {};
+    const citiesBody = document.getElementById('cities-table-body');
+    if (citiesBody) {
+        citiesBody.innerHTML = '';
+        const cities = Object.entries(cityData).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        if (!cities.length) {
+            citiesBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No city data yet.</td></tr>';
+        } else {
+            cities.forEach(([city, val]) => {
+                const pct = typeof val === 'number' && val <= 1 ? (val * 100).toFixed(1) : parseFloat(val).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${city}</strong></td>
+                    <td><span class="badge badge-glow-primary">${pct}%</span></td>
+                `;
+                citiesBody.appendChild(tr);
+            });
+        }
+    }
+}
+</script>
+{% endblock %}

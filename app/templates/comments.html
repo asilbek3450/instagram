@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Comments & Sentiment - Instagram Analytics Pro{% endblock %}
+{% block page_title %}Comments & Sentiment Analysis{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Chart Column -->
+    <div class="col-lg-5">
+        <div class="glass-card h-100">
+            <h5 class="mb-4" data-i18n="com_sentiment_dist">Sentiment Distribution</h5>
+            <div style="height: 250px;">
+                <canvas id="sentiment-doughnut-chart"></canvas>
+            </div>
+            
+            <hr class="border-card my-4">
+            
+            <div class="d-flex justify-content-around text-center">
+                <div>
+                    <span class="badge bg-success rounded-circle p-2 mb-2"><i class="bi bi-emoji-smile"></i></span>
+                    <div class="fw-bold small text-success" id="sentiment-pos-pct">0%</div>
+                    <span class="text-secondary small" data-i18n="com_positive">Positive</span>
+                </div>
+                <div>
+                    <span class="badge bg-secondary rounded-circle p-2 mb-2"><i class="bi bi-emoji-expressionless"></i></span>
+                    <div class="fw-bold small text-secondary" id="sentiment-neu-pct">0%</div>
+                    <span class="text-secondary small" data-i18n="com_neutral">Neutral</span>
+                </div>
+                <div>
+                    <span class="badge bg-danger rounded-circle p-2 mb-2"><i class="bi bi-emoji-frown"></i></span>
+                    <div class="fw-bold small text-danger" id="sentiment-neg-pct">0%</div>
+                    <span class="text-secondary small" data-i18n="com_negative">Negative</span>
+                </div>
+                <div>
+                    <span class="badge bg-warning rounded-circle p-2 mb-2"><i class="bi bi-shield-exclamation"></i></span>
+                    <div class="fw-bold small text-warning" id="sentiment-spam-pct">0%</div>
+                    <span class="text-secondary small" data-i18n="com_spam">Spam</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Spam & Top Keywords Summary -->
+    <div class="col-lg-7">
+        <div class="glass-card h-100">
+            <h5 class="mb-3" data-i18n="com_audit_logs">Audit Logs & Sentiment Details</h5>
+            <p class="text-muted small">Our natural language algorithm processes your comments automatically to flag spam bot offers, negative slurs, and engagement tags.</p>
+            
+            <div class="list-group list-group-flush bg-transparent mt-4" id="sentiment-stats-list">
+                <div class="list-group-item bg-transparent border-0 px-0 pb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-bold small"><i class="bi bi-shield-alert text-warning me-2"></i>Spam Detection Audit</span>
+                        <span class="badge badge-glow-secondary" id="total-spam-flagged">0 Flagged</span>
+                    </div>
+                    <div class="small text-secondary">Simulated bot filters analyze crypto advice, link promotions, and follow exchanges.</div>
+                </div>
+                <div class="list-group-item bg-transparent border-0 px-0 py-3 border-top border-card">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-bold small"><i class="bi bi-chat-left-quote text-primary me-2"></i>Common Positive Phrases</span>
+                        <span class="badge badge-glow-primary" id="common-phrases-count">5 High-Freq</span>
+                    </div>
+                    <div class="small text-secondary" id="positive-keyphrases">"love this", "gorgeous", "amazing post", "inspired", "wow"</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comments Log Table -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="glass-card">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="m-0" data-i18n="com_audit_feed">Audit Feed (Recent Comments)</h5>
+                <select class="form-select form-glass py-1 px-2 small" style="width: auto" id="sentiment-filter-select" onchange="filterCommentsTable()">
+                    <option value="ALL" selected>All Comments</option>
+                    <option value="POSITIVE">Positive Only</option>
+                    <option value="NEUTRAL">Neutral Only</option>
+                    <option value="NEGATIVE">Negative Only</option>
+                    <option value="SPAM">Flagged Spam</option>
+                </select>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Comment</th>
+                            <th>Sentiment</th>
+                            <th>Status Tag</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="comments-table-body">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No account connected or loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+let sentimentChart = null;
+let allComments = [];
+
+document.addEventListener('activeAccountChanged', (e) => {
+    const acc = e.detail;
+    if (acc && acc.id) {
+        loadCommentsData(acc.id);
+    }
+});
+
+document.addEventListener('themeChanged', () => {
+    const activeId = localStorage.getItem('active_account_id');
+    if (activeId) {
+        loadCommentsData(activeId);
+    }
+});
+
+async function loadCommentsData(accountId) {
+    const token = getAccessToken();
+    try {
+        const response = await fetch(`/api/posts/comments/${accountId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            allComments = data.comments || [];
+            processSentimentData(allComments);
+            renderCommentsTable(allComments);
+        }
+    } catch (e) {
+        console.error("Failed to load comments data", e);
+    }
+}
+
+function processSentimentData(comments) {
+    let counts = { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0, SPAM: 0 };
+    comments.forEach(c => {
+        if (c.is_spam) {
+            counts.SPAM++;
+        } else {
+            counts[c.sentiment]++;
+        }
+    });
+    
+    const total = comments.length || 1;
+    
+    // Set text metrics
+    document.getElementById('sentiment-pos-pct').textContent = `${Math.round(counts.POSITIVE/total * 100)}%`;
+    document.getElementById('sentiment-neu-pct').textContent = `${Math.round(counts.NEUTRAL/total * 100)}%`;
+    document.getElementById('sentiment-neg-pct').textContent = `${Math.round(counts.NEGATIVE/total * 100)}%`;
+    document.getElementById('sentiment-spam-pct').textContent = `${Math.round(counts.SPAM/total * 100)}%`;
+    document.getElementById('total-spam-flagged').textContent = `${counts.SPAM} Flagged`;
+    
+    // Draw chart
+    if (sentimentChart) {
+        sentimentChart.destroy();
+    }
+    
+    const labels = ['Positive', 'Neutral', 'Negative', 'Spam'];
+    const values = [counts.POSITIVE, counts.NEUTRAL, counts.NEGATIVE, counts.SPAM];
+    
+    sentimentChart = ChartThemeHelper.createDoughnutChart('sentiment-doughnut-chart', labels, values);
+}
+
+function renderCommentsTable(comments) {
+    const tbody = document.getElementById('comments-table-body');
+    if (!tbody) return;
+    
+    if (!comments || comments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No comments retrieved.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    comments.forEach(c => {
+        const tr = document.createElement('tr');
+        const dateStr = new Date(c.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        let sentClass = 'badge bg-secondary';
+        let sentText = c.sentiment;
+        if (c.sentiment === 'POSITIVE') sentClass = 'badge bg-success';
+        if (c.sentiment === 'NEGATIVE') sentClass = 'badge bg-danger';
+        
+        let statusTag = '<span class="badge badge-glow-success">Clear</span>';
+        if (c.is_spam) {
+            statusTag = '<span class="badge bg-warning text-dark"><i class="bi bi-shield-fill-exclamation me-1"></i>Spam Flag</span>';
+            sentClass = 'badge bg-secondary';
+            sentText = 'SPAM';
+        }
+        
+        tr.innerHTML = `
+            <td><strong>@${c.username}</strong></td>
+            <td><div class="text-wrap small text-secondary">${c.text}</div></td>
+            <td><span class="${sentClass}">${sentText}</span></td>
+            <td>${statusTag}</td>
+            <td class="small text-secondary">${dateStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function filterCommentsTable() {
+    const filter = document.getElementById('sentiment-filter-select').value;
+    if (filter === 'ALL') {
+        renderCommentsTable(allComments);
+    } else {
+        const filtered = allComments.filter(c => {
+            if (filter === 'SPAM') return c.is_spam;
+            return c.sentiment === filter && !c.is_spam;
+        });
+        renderCommentsTable(filtered);
+    }
+}
+</script>
+{% endblock %}

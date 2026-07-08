@@ -1,0 +1,285 @@
+"""
+Public Instagram Reels/media downloader service.
+
+Data source chain:
+  1. RapidAPI (instagram120) — `/api/instagram/reels` lists a profile's reels
+     (thumbnails + stats only, no video URLs) and `/api/instagram/links`
+     resolves a post/reel URL to a direct CDN .mp4 link.
+  2. yt-dlp fallback — if the RapidAPI resolve call fails (quota, outage,
+     unsupported media), we extract the direct video URL locally with yt-dlp.
+
+The RapidAPI key never reaches the browser: the frontend only calls our own
+/api/downloader/* endpoints. Media bytes are streamed through our proxy so the
+browser's `download` attribute works without CORS issues; the proxy only
+accepts Instagram CDN hosts (see `is_allowed_media_url`) to prevent SSRF.
+"""
+
+import re
+import time
+from urllib.parse import urlparse
+
+import requests
+from flask import current_app
+
+try:
+    import yt_dlp
+except ImportError:  # optional fallback — feature degrades gracefully
+    yt_dlp = None
+
+# Instagram CDN hosts we are willing to proxy media bytes from.
+_ALLOWED_HOST_SUFFIXES = ('.cdninstagram.com', '.fbcdn.net')
+
+_POST_URL_RE = re.compile(
+    r'^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/(?P<code>[A-Za-z0-9_-]+)/?'
+)
+
+# Simple in-process TTL cache to save RapidAPI quota on repeat lookups.
+_CACHE_TTL = 300  # seconds
+_cache = {}
+
+
+def _cache_get(key):
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < _CACHE_TTL:
+        return hit[1]
+    _cache.pop(key, None)
+    return None
+
+
+def _cache_set(key, value):
+    if len(_cache) > 256:  # avoid unbounded growth
+        _cache.clear()
+    _cache[key] = (time.time(), value)
+
+
+class UpstreamError(ValueError):
+    """RapidAPI returned a non-success status. Carries the HTTP status code."""
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
+def _rapidapi_post(path, payload, timeout=30):
+    host = current_app.config.get('RAPIDAPI_HOST')
+    key = current_app.config.get('RAPIDAPI_KEY')
+    if not key:
+        raise ValueError("Downloader is not configured (RAPIDAPI_KEY missing).")
+    resp = requests.post(
+        f"https://{host}{path}",
+        json=payload,
+        headers={
+            'x-rapidapi-key': key,
+            'x-rapidapi-host': host,
+            'Content-Type': 'application/json',
+        },
+        timeout=timeout,
+    )
+    if resp.status_code == 429:
+        raise UpstreamError(429, "Rate limit reached, please try again in a minute.")
+    if resp.status_code != 200:
+        error_msg = f"Upstream API error ({resp.status_code})."
+        try:
+            # Try to extract a specific error message from the API
+            data = resp.json()
+            if isinstance(data, dict) and data.get('message'):
+                msg_lower = data['message'].lower()
+                if 'private' in msg_lower or 'not authorized' in msg_lower:
+                    error_msg = "Ushbu profil yopiq (private). Yopiq profillardan yuklab olish imkonsiz."
+                else:
+                    error_msg = data['message']
+        except Exception:
+            if resp.status_code == 400:
+                error_msg = "Profil yopiq (private) bo'lishi mumkin yoki havola xato. Yopiq profillardan yuklab olish imkonsiz."
+        raise UpstreamError(resp.status_code, error_msg)
+    return resp.json()
+
+
+def is_allowed_media_url(url):
+    """Only Instagram CDN URLs may pass through the media proxy."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != 'https' or not parsed.hostname:
+        return False
+    return parsed.hostname.endswith(_ALLOWED_HOST_SUFFIXES)
+
+
+def parse_post_url(url):
+    """Return the shortcode from an instagram.com post/reel URL, or None."""
+    m = _POST_URL_RE.match((url or '').strip())
+    return m.group('code') if m else None
+
+
+# ── Reels listing ────────────────────────────────────────────────────────────
+
+def _best_thumbnail(media):
+    candidates = (media.get('image_versions2') or {}).get('candidates') or []
+    if not candidates:
+        return None
+    # Prefer a mid-size portrait candidate (~480px) — big enough for cards,
+    # cheaper than the full-size first entry.
+    for c in candidates:
+        if c.get('width') == 480:
+            return c.get('url')
+    return candidates[0].get('url')
+
+
+def fetch_reels(username, max_id=''):
+    """
+    Return {'items': [...], 'next_max_id': str|None, 'has_more': bool}
+    for a public profile's reels. Raises ValueError with a friendly message.
+    """
+    username = (username or '').strip().lstrip('@').lower()
+    if not username:
+        raise ValueError("Username is required.")
+
+    cache_key = ('reels', username, max_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    data = _rapidapi_post('/api/instagram/reels',
+                          {'username': username, 'maxId': max_id or ''})
+
+    result = data.get('result') or {}
+    edges = result.get('edges') or []
+    if not edges and not max_id:
+        raise ValueError(
+            "Hech qanday reel topilmadi. Profil yopiq (private) yoki bo'sh bo'lishi mumkin. Yopiq profillardan yuklab olish imkonsiz."
+        )
+
+    items = []
+    for edge in edges:
+        node = edge.get('node') or {}
+        # The upstream API returns two shapes: fields nested under
+        # `node.media`, or flattened directly on `node`. Support both.
+        media = node.get('media') or node
+        code = media.get('code')
+        if not code:
+            continue
+
+        # Direct video URL when the listing already carries it
+        # (`video_versions`) — saves a per-download /links API call.
+        video_url = None
+        video_versions = media.get('video_versions') or []
+        if video_versions and isinstance(video_versions, list):
+            video_url = (video_versions[0] or {}).get('url')
+
+        caption = media.get('caption')
+        caption_text = caption.get('text') if isinstance(caption, dict) else None
+
+        items.append({
+            'id': media.get('pk'),
+            'code': code,
+            'post_url': f"https://www.instagram.com/reel/{code}/",
+            'thumbnail': _best_thumbnail(media),
+            'video_url': video_url,
+            'caption': (caption_text or '')[:180] or None,
+            'play_count': media.get('play_count') or 0,
+            'like_count': media.get('like_count') or 0,
+            'comment_count': media.get('comment_count') or 0,
+            'counts_hidden': bool(media.get('like_and_view_counts_disabled')),
+            'width': media.get('original_width'),
+            'height': media.get('original_height'),
+        })
+
+    page_info = result.get('page_info') or {}
+    payload = {
+        'username': username,
+        'items': items,
+        'next_max_id': page_info.get('end_cursor') or None,
+        'has_more': bool(page_info.get('has_next_page')),
+    }
+    _cache_set(cache_key, payload)
+    return payload
+
+
+# ── Download link resolution ─────────────────────────────────────────────────
+
+def _resolve_via_rapidapi(post_url):
+    data = _rapidapi_post('/api/instagram/links', {'url': post_url})
+    # Response shape: [{"urls": [{url, name, subName, extension, quality}], "meta": {...}}]
+    entries = data if isinstance(data, list) else [data]
+    best = None
+    title = None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        title = title or (entry.get('meta') or {}).get('title')
+        for u in entry.get('urls') or []:
+            if not u.get('url'):
+                continue
+            if best is None or (u.get('quality') or 0) > (best.get('quality') or 0):
+                best = u
+    if not best:
+        raise ValueError("No downloadable media in API response.")
+    meta = entry.get('meta') or {}
+    return {
+        'video_url': best['url'],
+        'extension': best.get('extension') or 'mp4',
+        'quality': best.get('subName') or '',
+        'title': title or '',
+        'thumbnail': meta.get('thumbnail') or meta.get('image') or '',
+        'source': 'api',
+    }
+
+
+def _resolve_via_ytdlp(post_url):
+    """Local fallback: extract the direct media URL with yt-dlp (no download)."""
+    if yt_dlp is None:
+        raise ValueError("yt-dlp is not installed.")
+    opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(post_url, download=False)
+    # Prefer a single-file mp4 format with both audio and video.
+    candidates = [
+        f for f in (info.get('formats') or [])
+        if f.get('url') and f.get('vcodec') != 'none' and f.get('acodec') != 'none'
+    ]
+    candidates.sort(key=lambda f: f.get('height') or 0, reverse=True)
+    url = candidates[0]['url'] if candidates else info.get('url')
+    if not url:
+        raise ValueError("yt-dlp could not extract a media URL.")
+    height = candidates[0].get('height') if candidates else None
+    return {
+        'video_url': url,
+        'extension': 'mp4',
+        'quality': f"{height}p" if height else 'HD',
+        'title': info.get('title') or '',
+        'thumbnail': info.get('thumbnail') or '',
+        'source': 'yt-dlp',
+    }
+
+
+def resolve_download(post_url):
+    """
+    Resolve an instagram.com post/reel URL to a direct CDN media URL.
+    Tries RapidAPI first, falls back to yt-dlp per requirements.
+    """
+    code = parse_post_url(post_url)
+    if not code:
+        raise ValueError("Enter a valid Instagram post/reel link.")
+    canonical = f"https://www.instagram.com/reel/{code}/"
+
+    cache_key = ('resolve', code)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        result = _resolve_via_rapidapi(canonical)
+    except Exception as api_exc:
+        print(f"[Downloader] RapidAPI resolve failed ({api_exc}); trying yt-dlp fallback")
+        try:
+            result = _resolve_via_ytdlp(canonical)
+        except Exception as ytdlp_exc:
+            print(f"[Downloader] yt-dlp fallback failed: {ytdlp_exc}")
+            raise ValueError(
+                "Ushbu mediani yuklab bo'lmadi. U o'chirilgan yoki profil yopiq (private) bo'lishi mumkin. Yopiq profillardan yuklab olish imkonsiz."
+            ) from ytdlp_exc
+
+    result['code'] = code
+    result['filename'] = f"instagram_{code}.{result['extension']}"
+    _cache_set(cache_key, result)
+    return result

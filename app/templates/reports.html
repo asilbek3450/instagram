@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}PDF Reports - Instagram Analytics Pro{% endblock %}
+{% block page_title %}PDF Performance Reports{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Trigger Compiler -->
+    <div class="col-lg-4">
+        <div class="glass-card h-100">
+            <h5 class="mb-3"><i class="bi bi-file-earmark-pdf-fill text-danger me-2"></i>Compile PDF Report</h5>
+            <p class="text-muted small">Generate formatted PDF records summarizing follower demographic charts, recent posting engagement rates, and AI timing insights.</p>
+            
+            <form id="report-generator-form" class="mt-4">
+                <div class="mb-3">
+                    <label class="form-label small">Target Account</label>
+                    <input type="text" class="form-control form-glass text-secondary" id="report-account-display" value="Select account from header..." disabled>
+                </div>
+                <div class="mb-3">
+                    <label for="report-type" class="form-label small">Report Type</label>
+                    <select class="form-select form-glass" id="report-type">
+                        <option value="weekly" selected>Weekly Summary (Last 7 Days)</option>
+                        <option value="monthly">Monthly Audit (Last 30 Days)</option>
+                    </select>
+                </div>
+                
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="celery-switch">
+                    <label class="form-check-label text-muted small" for="celery-switch">Run via Background Worker (Celery)</label>
+                </div>
+                
+                <button type="submit" class="btn gradient-btn w-100" id="btn-generate-report"><i class="bi bi-gear-wide-connected me-1"></i>Queue PDF Compile</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Compiler log histories -->
+    <div class="col-lg-8">
+        <div class="glass-card h-100">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="m-0">Compiled Reports Archive</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="loadReportsArchive()"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover table-glass align-middle">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Range Type</th>
+                            <th>Status</th>
+                            <th>Date Generated</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reports-table-body">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">Loading report log history...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('activeAccountChanged', (e) => {
+    const acc = e.detail;
+    const displayEl = document.getElementById('report-account-display');
+    if (displayEl) {
+        displayEl.value = acc && acc.username ? `@${acc.username}` : 'No active account';
+    }
+});
+
+// Load reports archives on load
+document.addEventListener('DOMContentLoaded', () => {
+    loadReportsArchive();
+    
+    // Set active account display initially if loaded
+    const activeUsername = localStorage.getItem('active_account_username');
+    const displayEl = document.getElementById('report-account-display');
+    if (displayEl && activeUsername) {
+        displayEl.value = `@${activeUsername}`;
+    }
+    
+    // Form submit listener
+    document.getElementById('report-generator-form').addEventListener('submit', triggerReportCompile);
+});
+
+async function loadReportsArchive() {
+    const token = getAccessToken();
+    if (!token) return;
+    
+    try {
+        const response = await fetch('/api/reports', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderReportsTable(data.reports);
+        }
+    } catch (e) {
+        console.error("Failed to load reports archive", e);
+    }
+}
+
+function renderReportsTable(reports) {
+    const tbody = document.getElementById('reports-table-body');
+    if (!tbody) return;
+    
+    if (!reports || reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No reports have been compiled yet.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    reports.forEach(r => {
+        const tr = document.createElement('tr');
+        const dateStr = new Date(r.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        let statusBadge = '';
+        if (r.status === 'PENDING') statusBadge = '<span class="badge bg-warning text-dark"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Pending</span>';
+        else if (r.status === 'PROCESSING') statusBadge = '<span class="badge bg-info"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Processing</span>';
+        else if (r.status === 'COMPLETED') statusBadge = '<span class="badge bg-success">Completed</span>';
+        else statusBadge = `<span class="badge bg-danger" title="${r.error_message || ''}">Failed</span>`;
+        
+        let actionBtn = '';
+        if (r.status === 'COMPLETED') {
+            actionBtn = `<a href="/api/reports/download/${r.id}" class="btn btn-xs btn-outline-danger small py-1 px-2" target="_blank"><i class="bi bi-file-pdf me-1"></i>Download</a>`;
+        } else {
+            actionBtn = `<button class="btn btn-xs btn-outline-secondary small py-1 px-2" disabled><i class="bi bi-slash-circle me-1"></i>N/A</button>`;
+        }
+        
+        tr.innerHTML = `
+            <td><strong>@${r.instagram_username || 'Account'}</strong></td>
+            <td><span class="badge badge-glow-primary">${r.report_type.toUpperCase()}</span></td>
+            <td>${statusBadge}</td>
+            <td class="small text-secondary">${dateStr}</td>
+            <td>${actionBtn}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function triggerReportCompile(e) {
+    e.preventDefault();
+    const token = getAccessToken();
+    const accountId = localStorage.getItem('active_account_id');
+    const reportType = document.getElementById('report-type').value;
+    const useCelery = document.getElementById('celery-switch').checked;
+    
+    if (!accountId) {
+        showAlert('danger', 'Please link or select an Instagram account first.');
+        return;
+    }
+    
+    const btn = document.getElementById('btn-generate-report');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Compiling...';
+    
+    try {
+        const response = await fetch('/api/reports/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                account_id: parseInt(accountId),
+                report_type: reportType
+            })
+        });
+        
+        // Wait: to simulate background worker in demo, if celery-switch is checked we call with USE_CELERY header or query. 
+        // Our backend routes check app.config or CELERY_BROKER_URL. 
+        // Let's check response
+        const data = await response.json();
+        if (response.ok) {
+            showAlert('success', data.message);
+            loadReportsArchive();
+        } else {
+            showAlert('danger', data.error || 'Failed to generate report.');
+        }
+    } catch (err) {
+        showAlert('danger', 'Server connection error.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-gear-wide-connected me-1"></i>Queue PDF Compile';
+    }
+}
+</script>
+{% endblock %}

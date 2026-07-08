@@ -1,0 +1,225 @@
+# Uzbek translations for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-07-08 18:04+0500\n"
+"PO-Revision-Date: 2026-07-08 18:04+0500\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: uz\n"
+"Language-Team: uz <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: app/templates/landing.html:43
+msgid "Features"
+msgstr "Imkoniyatlar"
+
+#: app/templates/landing.html:44
+msgid "Pricing"
+msgstr "Narxlar"
+
+#: app/templates/landing.html:45
+msgid "Reels Downloader"
+msgstr "Reels Yuklab Oluvchi"
+
+#: app/templates/landing.html:66
+msgid "Sign In"
+msgstr "Kirish"
+
+#: app/templates/landing.html:67
+msgid "Get Started"
+msgstr "Boshlash"
+
+#: app/templates/landing.html:77
+msgid "AI-Powered Analytics"
+msgstr "Sun'iy intellekt tahlillari"
+
+#: app/templates/landing.html:79
+msgid "Grow Your Instagram"
+msgstr "Instagramingizni o'stiring"
+
+#: app/templates/landing.html:79
+msgid "Scientifically"
+msgstr "Ilmiy asosda"
+
+#: app/templates/landing.html:82
+msgid ""
+"InstaTrack Pro gives you deep, actionable insights on your followers, "
+"engagement metrics, comment sentiment, and predictive AI recommendations."
+" Stop guessing and start growing."
+msgstr "InstaTrack Pro obunachilaringiz, faollik ko'rsatkichlari, izohlar kayfiyati va AI tavsiyalarini taqdim etadi. Taxmin qilishni bas qilib, o'sishni boshlang."
+
+#: app/templates/landing.html:85
+msgid "Start Free Trial"
+msgstr "Bepul boshlash"
+
+#: app/templates/landing.html:86
+msgid "See Features"
+msgstr "Imkoniyatlarni ko'rish"
+
+#: app/templates/landing.html:99
+msgid "Simulated Feed"
+msgstr "Simulyatsiya qilingan lenta"
+
+#: app/templates/landing.html:108
+msgid "Followers"
+msgstr "Obunachilar"
+
+#: app/templates/landing.html:112
+msgid "Engagement"
+msgstr "Faollik"
+
+#: app/templates/landing.html:116
+msgid "Positive Sent."
+msgstr "Ijobiy fikrlar."
+
+#: app/templates/landing.html:123
+msgid "AI Growth Prediction"
+msgstr "AI o'sish prognozi"
+
+#: app/templates/landing.html:126
+msgid "Based on your high engagement posting window at"
+msgstr "Eng faol posting vaqtingiz asosida"
+
+#: app/templates/landing.html:126
+msgid "7:00 PM Thursday"
+msgstr "Payshanba 19:00"
+
+#: app/templates/landing.html:126
+msgid "you are projected to gain"
+msgstr "sizga prognoz qilinmoqda"
+
+#: app/templates/landing.html:126
+msgid "+1,250 followers"
+msgstr "+1,250 obunachi"
+
+#: app/templates/landing.html:126
+msgid "in the next 7 days."
+msgstr "kelgusi 7 kun ichida."
+
+#: app/templates/landing.html:138
+msgid "Enterprise-Grade Features"
+msgstr "Yuqori darajadagi imkoniyatlar"
+
+#: app/templates/landing.html:139
+msgid ""
+"Track everything you need to know about your Instagram profile with "
+"state-of-the-art tools."
+msgstr "Zamonaviy vositalar yordamida Instagram profilingiz haqida barcha kerakli ma'lumotlarni kuzatib boring."
+
+#: app/templates/landing.html:146
+msgid "Historical Growth Tracking"
+msgstr "Tarixiy o'sishni kuzatish"
+
+#: app/templates/landing.html:147
+msgid ""
+"Understand daily growth trends, demographics breakdown by gender and "
+"country, and benchmark accounts."
+msgstr "Kunlik o'sish tendensiyalarini, jins va davlatlar bo'yicha demografiyani tushunib oling."
+
+#: app/templates/landing.html:153
+msgid "Sentiment & Spam Audit"
+msgstr "Kayfiyat va Spam tekshiruvi"
+
+#: app/templates/landing.html:154
+msgid ""
+"Perform deep natural language checks on post comments. Easily filter "
+"spam, negativity, and promotional bots."
+msgstr "Izohlarni chuqur tahlil qiling. Spam, salbiy fikrlar va botlarni osongina ajrating."
+
+#: app/templates/landing.html:160
+msgid "PDF Reports Compiler"
+msgstr "PDF hisobotlar"
+
+#: app/templates/landing.html:161
+msgid ""
+"Automatically compile weekly/monthly performance reports. Ideal for "
+"digital marketing agencies and influencers."
+msgstr "Haftalik/oylik hisobotlarni avtomatik yarating. Agentliklar va blogerlar uchun ideal."
+
+#: app/templates/landing.html:172
+msgid "Simple, Transparent Pricing"
+msgstr "Oddiy va shaffof narxlar"
+
+#: app/templates/landing.html:173
+msgid ""
+"Flexible plans for content creators, managers, and enterprise "
+"organizations."
+msgstr "Kontent yaratuvchilar, menejerlar va tashkilotlar uchun moslashuvchan tariflar."
+
+#: app/templates/landing.html:180
+msgid "Free Starter"
+msgstr "Bepul"
+
+#: app/templates/landing.html:183 app/templates/landing.html:202
+msgid "month"
+msgstr "oy"
+
+#: app/templates/landing.html:186
+msgid "1 Instagram Account"
+msgstr "1 ta Instagram akkaunt"
+
+#: app/templates/landing.html:187
+msgid "7-Day Growth Metrics"
+msgstr "7 kunlik o'sish ko'rsatkichlari"
+
+#: app/templates/landing.html:188
+msgid "Basic Post Analytics"
+msgstr "Asosiy post tahlillari"
+
+#: app/templates/landing.html:189
+msgid "AI Suggestions"
+msgstr "AI tavsiyalari"
+
+#: app/templates/landing.html:190
+msgid "PDF Reports Export"
+msgstr "PDF hisobot yuklab olish"
+
+#: app/templates/landing.html:192
+msgid "Sign Up Free"
+msgstr "Bepul ro'yxatdan o'tish"
+
+#: app/templates/landing.html:198
+msgid "Most Popular"
+msgstr "Eng mashhur"
+
+#: app/templates/landing.html:199
+msgid "Pro Influencer"
+msgstr "Pro Influencer"
+
+#: app/templates/landing.html:205
+msgid "5 Instagram Accounts"
+msgstr "5 ta Instagram akkaunt"
+
+#: app/templates/landing.html:206
+msgid "30-Day Growth History"
+msgstr "30 kunlik o'sish tarixi"
+
+#: app/templates/landing.html:207
+msgid "Full Sentiment/Spam Audit"
+msgstr "To'liq kayfiyat/spam tekshiruvi"
+
+#: app/templates/landing.html:208
+msgid "AI Posting Time & Tag Suggestions"
+msgstr "AI joylash vaqti va teglari"
+
+#: app/templates/landing.html:209
+msgid "PDF Reports & Downloads"
+msgstr "PDF hisobotlar va yuklab olish"
+
+#: app/templates/landing.html:211
+msgid "Get Started Pro"
+msgstr "Pro'ni boshlash"
+
+#: app/templates/landing.html:221
+msgid "All rights reserved. Created for research and demo."
+msgstr "Barcha huquqlar himoyalangan. Tadqiqot va demo uchun yaratilgan."
+
