@@ -411,12 +411,23 @@
         const raw = document.getElementById('dl-input').value.trim();
         if (!raw) return;
 
-        if (/instagram\.com\/(reel|reels|p|tv)\//i.test(raw)) {
+        if (/instagram\.com\/(?:[A-Za-z0-9._]+\/)?(reel|reels|p|tv)\//i.test(raw) ||
+            /instagram\.com\/share\//i.test(raw)) {
             await directDownload(raw);
         } else {
-            await loadReels(raw.replace(/^@/, ''), '', false);
+            // A pasted profile URL (instagram.com/username/) browses that
+            // profile's reels; anything else is treated as a username —
+            // with or without a leading @ (also "@@user", "@ user").
+            const profile = raw.match(/instagram\.com\/@?([A-Za-z0-9._]+)\/?/i);
+            await loadReels(profile ? profile[1] : raw.replace(/^[@\s]+/, ''), '', false);
         }
     });
+
+    // Extract the shortcode from a post/reel URL (client-side fallback).
+    function codeFromUrl(url) {
+        const m = url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i);
+        return m ? m[1] : null;
+    }
 
     // ── Direct link → instant download (changed to display card) ─────────
     async function directDownload(url) {
@@ -431,16 +442,21 @@
             document.getElementById('profile-header').classList.remove('d-flex');
             document.getElementById('profile-header').classList.add('d-none');
 
+            // The backend returns the canonical shortcode (works for /share/
+            // links too); fall back to parsing it out of the pasted URL.
+            const code = info.code || codeFromUrl(url) || '';
             const item = {
                 thumbnail: info.thumbnail,
-                code: info.code,
+                code: code,
                 caption: info.title,
-                post_url: url,
+                post_url: code ? 'https://www.instagram.com/reel/' + code + '/' : url,
                 counts_hidden: true,
-                comment_count: 0
+                like_count: info.like_count || 0,
+                comment_count: info.comment_count || 0
             };
 
-            resolveCache[info.code] = info;
+            resolveCache[code] = info;
+            itemsByCode[code] = item;
             grid.innerHTML = cardHtml(item);
         } catch (err) {
             removeSkeletons();
@@ -499,11 +515,11 @@
             ? `<img class="reel-thumb" src="${esc(item.thumbnail)}" loading="lazy" alt="reel"
                     onerror="this.parentElement.style.background='linear-gradient(135deg,#2b2f55,#1a1d3a)'; this.remove();">`
             : '';
-        const stats = item.counts_hidden
-            ? `<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`
-            : `<span class="reel-stat"><i class="bi bi-play-fill"></i> ${fmt(item.play_count)}</span>
-               <span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>
-               <span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`;
+        const chips = [];
+        if (!item.counts_hidden) chips.push(`<span class="reel-stat"><i class="bi bi-play-fill"></i> ${fmt(item.play_count)}</span>`);
+        if (!item.counts_hidden || item.like_count > 0) chips.push(`<span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>`);
+        chips.push(`<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`);
+        const stats = chips.join('');
         return `
         <div class="col-6 col-md-4 col-lg-3">
             <div class="reel-card">
@@ -542,6 +558,7 @@
         return data;
     }
     async function resolveCode(code) {
+        if (!code) throw new Error('Could not identify this reel. Paste its link and try again.');
         if (resolveCache[code]) return resolveCache[code];
         // If the reels listing already delivered a direct download link,
         // use it — no extra backend/API round-trip needed.
@@ -596,23 +613,41 @@
         previewVideo.load();
     });
 
+    // Hiding immediately after show() races Bootstrap's fade transition and
+    // can leave the modal stuck open — wait for `shown` if mid-transition.
+    function hidePreviewModal() {
+        const el = document.getElementById('previewModal');
+        if (el.classList.contains('show')) previewModal.hide();
+        else el.addEventListener('shown.bs.modal', () => previewModal.hide(), { once: true });
+    }
+
+    // Expired CDN link or proxy failure: the <video> errors out after the
+    // modal already resolved — tell the user instead of a silent 0:00 player.
+    previewVideo.addEventListener('error', () => {
+        if (!previewVideo.getAttribute('src')) return; // reset, not a failure
+        document.getElementById('preview-title').innerHTML =
+            '<i class="bi bi-exclamation-triangle me-2"></i>Preview unavailable — try Download';
+    });
+
     async function openPreview(code) {
         clearAlert();
+        const dlBtn = document.getElementById('preview-download-btn');
         document.getElementById('preview-title').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading…';
-        document.getElementById('preview-download-btn').classList.add('disabled');
+        dlBtn.classList.add('disabled');
+        dlBtn.onclick = (e) => e.preventDefault();
+        previewVideo.removeAttribute('src');
+        previewVideo.load();
         previewModal.show();
         try {
             const info = await resolveCode(code);
-            const src = info.proxied ? info.download_url : info.direct_url;
-            previewVideo.src = src;
+            previewVideo.src = info.proxied ? info.download_url : info.direct_url;
             previewVideo.play().catch(() => {});
             document.getElementById('preview-title').innerHTML =
                 '<i class="bi bi-play-circle me-2"></i>' + esc((info.title || 'Reel preview').slice(0, 70));
-            const dlBtn = document.getElementById('preview-download-btn');
             dlBtn.classList.remove('disabled');
             dlBtn.onclick = (e) => { e.preventDefault(); triggerDownload(info); };
         } catch (err) {
-            previewModal.hide();
+            hidePreviewModal();
             showAlert(err.message);
         }
     }

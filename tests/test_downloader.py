@@ -62,7 +62,9 @@ def _fake_links_payload():
             {"url": "https://scontent.cdninstagram.com/video.mp4",
              "name": "MP4", "subName": "720p", "extension": "mp4", "quality": 720},
         ],
-        "meta": {"title": "Test reel title"},
+        "meta": {"title": "Test reel title", "likeCount": 12, "commentCount": 3,
+                 "username": "author1", "shortcode": "XYZ789"},
+        "pictureUrl": "https://scontent.cdninstagram.com/thumb.jpg",
     }]
 
 
@@ -97,8 +99,38 @@ class DownloaderServiceTestCase(unittest.TestCase):
             'https://www.instagram.com/reel/DWv5FvBDaud/'), 'DWv5FvBDaud')
         self.assertEqual(downloader_service.parse_post_url(
             'https://instagram.com/p/ABC_12-3'), 'ABC_12-3')
+        # Query strings (share links copied from the app/web carry utm params)
+        self.assertEqual(downloader_service.parse_post_url(
+            'https://www.instagram.com/reel/DaiLJeEthr2/?utm_source=ig_web_copy_link&igsh=x'),
+            'DaiLJeEthr2')
+        # Scheme-less paste and username-segment post URLs
+        self.assertEqual(downloader_service.parse_post_url(
+            'www.instagram.com/reel/DWv5FvBDaud/'), 'DWv5FvBDaud')
+        self.assertEqual(downloader_service.parse_post_url(
+            'https://www.instagram.com/someuser/reel/DWv5FvBDaud/'), 'DWv5FvBDaud')
+        # /share/ tokens are not shortcodes — resolved separately via redirect
+        self.assertIsNone(downloader_service.parse_post_url(
+            'https://www.instagram.com/share/reel/_a8DqXfjK/'))
         self.assertIsNone(downloader_service.parse_post_url('https://evil.com/reel/X/'))
         self.assertIsNone(downloader_service.parse_post_url('not a url'))
+
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp(_fake_links_payload()))
+    @patch('app.services.downloader_service._resolve_share_url',
+           return_value='https://www.instagram.com/reel/XYZ789/?igsh=t')
+    def test_resolve_follows_share_redirect(self, mock_share, mock_post):
+        res = self.client.post('/api/downloader/resolve',
+                               json={'url': 'https://www.instagram.com/share/reel/_a8DqXfjK/'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()['code'], 'XYZ789')
+        mock_share.assert_called_once()
+
+    def test_quality_rank_handles_string_quality(self):
+        rank = downloader_service._quality_rank
+        self.assertEqual(rank({'quality': 720}), 720)
+        self.assertEqual(rank({'quality': '1080p'}), 1080)
+        self.assertEqual(rank({'quality': 'HD'}), 0)
+        self.assertEqual(rank({}), 0)
 
     def test_media_url_allowlist(self):
         ok = downloader_service.is_allowed_media_url
@@ -151,9 +183,35 @@ class DownloaderServiceTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn('No reels found', res.get_json()['error'])
 
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp({"success": False,
+                                  "message": "The download link not found."}, status=500))
+    def test_reels_upstream_500_is_friendly_error(self, mock_post):
+        """Upstream answers 500 'link not found' for some profiles — the raw
+        API text must not leak to the user."""
+        res = self.client.post('/api/downloader/reels', json={'username': 'flaky.profile'})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('No reels found', res.get_json()['error'])
+        self.assertNotIn('download link', res.get_json()['error'])
+
     def test_reels_requires_username(self):
         res = self.client.post('/api/downloader/reels', json={})
         self.assertEqual(res.status_code, 400)
+        # @-only / whitespace-only input is still "no username"
+        res = self.client.post('/api/downloader/reels', json={'username': '@ '})
+        self.assertEqual(res.status_code, 400)
+
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp(_fake_reels_payload()))
+    def test_reels_username_normalization(self, mock_post):
+        """'@user', '@@user', '@ User ' must all resolve to the same profile."""
+        for variant in ['@testuser', '@@testuser', ' @ TestUser ', 'testuser']:
+            downloader_service._cache.clear()
+            res = self.client.post('/api/downloader/reels', json={'username': variant})
+            self.assertEqual(res.status_code, 200, variant)
+            self.assertEqual(res.get_json()['username'], 'testuser', variant)
+            sent = mock_post.call_args.kwargs['json']['username']
+            self.assertEqual(sent, 'testuser', variant)
 
     # ── Resolve (download link) ──────────────────────────────────────────
     @patch('app.services.downloader_service.requests.post',
@@ -168,6 +226,11 @@ class DownloaderServiceTestCase(unittest.TestCase):
         self.assertIn('video.mp4', data['download_url'])       # 720p variant won
         self.assertEqual(data['filename'], 'instagram_XYZ789.mp4')
         self.assertEqual(data['title'], 'Test reel title')
+        # The frontend builds the result card from these:
+        self.assertEqual(data['code'], 'XYZ789')
+        self.assertEqual(data['thumbnail'], 'https://scontent.cdninstagram.com/thumb.jpg')
+        self.assertEqual(data['like_count'], 12)
+        self.assertEqual(data['comment_count'], 3)
 
     def test_resolve_rejects_bad_url(self):
         res = self.client.post('/api/downloader/resolve', json={'url': 'https://evil.com/reel/X/'})
@@ -212,6 +275,25 @@ class DownloaderServiceTestCase(unittest.TestCase):
         self.assertIn('attachment', res.headers['Content-Disposition'])
         self.assertIn('instagram_ABC.mp4', res.headers['Content-Disposition'])
         self.assertEqual(res.data, b'DATA')
+
+    @patch('app.routes.downloader.requests.get')
+    def test_media_proxy_forwards_range_requests(self, mock_get):
+        """<video> preview sends Range; the proxy must forward it upstream
+        and pass the 206/Content-Range back (Safari refuses to play otherwise)."""
+        upstream = mock_get.return_value
+        upstream.status_code = 206
+        upstream.headers = {'Content-Type': 'video/mp4', 'Content-Length': '1024',
+                            'Content-Range': 'bytes 0-1023/4096', 'Accept-Ranges': 'bytes'}
+        upstream.iter_content.return_value = iter([b'PART'])
+        upstream.raise_for_status.return_value = None
+
+        res = self.client.get(
+            '/api/downloader/media?url=https://scontent.cdninstagram.com/v.mp4',
+            headers={'Range': 'bytes=0-1023'})
+        self.assertEqual(res.status_code, 206)
+        self.assertEqual(res.headers['Content-Range'], 'bytes 0-1023/4096')
+        self.assertEqual(res.headers['Accept-Ranges'], 'bytes')
+        self.assertEqual(mock_get.call_args.kwargs['headers'], {'Range': 'bytes=0-1023'})
 
     # ── Page availability without auth ───────────────────────────────────
     def test_downloader_page_is_public(self):

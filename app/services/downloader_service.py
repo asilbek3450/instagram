@@ -29,8 +29,17 @@ except ImportError:  # optional fallback — feature degrades gracefully
 # Instagram CDN hosts we are willing to proxy media bytes from.
 _ALLOWED_HOST_SUFFIXES = ('.cdninstagram.com', '.fbcdn.net')
 
+# Accepts the scheme-less form, an optional `/<username>/` segment
+# (instagram.com/<user>/reel/<code>/) and trailing query strings.
 _POST_URL_RE = re.compile(
-    r'^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/(?P<code>[A-Za-z0-9_-]+)/?'
+    r'^(?:https?://)?(?:www\.)?instagram\.com/(?!share/)(?:[A-Za-z0-9._]+/)?'
+    r'(?:reel|reels|p|tv)/(?P<code>[A-Za-z0-9_-]+)/?'
+)
+
+# Mobile-app "Copy link" now often produces /share/… URLs that redirect to
+# the canonical post URL; they carry a share token, not a real shortcode.
+_SHARE_URL_RE = re.compile(
+    r'^(?:https?://)?(?:www\.)?instagram\.com/share/[A-Za-z0-9._/-]+', re.IGNORECASE
 )
 
 # Simple in-process TTL cache to save RapidAPI quota on repeat lookups.
@@ -111,6 +120,20 @@ def parse_post_url(url):
     return m.group('code') if m else None
 
 
+def _resolve_share_url(url):
+    """Follow an instagram.com/share/… redirect to the canonical post URL."""
+    url = url.strip()
+    if not url.lower().startswith('http'):
+        url = 'https://' + url
+    resp = requests.get(
+        url, allow_redirects=True, timeout=15, stream=True,
+        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                               'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'},
+    )
+    resp.close()
+    return resp.url
+
+
 # ── Reels listing ────────────────────────────────────────────────────────────
 
 def _best_thumbnail(media):
@@ -130,7 +153,9 @@ def fetch_reels(username, max_id=''):
     Return {'items': [...], 'next_max_id': str|None, 'has_more': bool}
     for a public profile's reels. Raises ValueError with a friendly message.
     """
-    username = (username or '').strip().lstrip('@').lower()
+    # Accept "@user", "@@user", "@ user", " @User " … — strip any leading
+    # @/whitespace mix so the upstream API always gets a bare username.
+    username = re.sub(r'^[@\s]+', '', (username or '')).strip().lower()
     if not username:
         raise ValueError("Username is required.")
 
@@ -139,14 +164,26 @@ def fetch_reels(username, max_id=''):
     if cached is not None:
         return cached
 
-    data = _rapidapi_post('/api/instagram/reels',
-                          {'username': username, 'maxId': max_id or ''})
+    try:
+        data = _rapidapi_post('/api/instagram/reels',
+                              {'username': username, 'maxId': max_id or ''})
+    except UpstreamError as e:
+        if e.status == 429:
+            raise
+        # The upstream API answers 500 "link not found" (and similar) for
+        # profiles it cannot list — private, renamed, or flaky. Map that to
+        # a friendly, accurate message instead of leaking the raw API text.
+        raise ValueError(
+            "No reels found for this profile. It may be private, misspelled "
+            "or temporarily unavailable. (Profil yopiq yoki mavjud emas.)"
+        ) from e
 
     result = data.get('result') or {}
     edges = result.get('edges') or []
     if not edges and not max_id:
         raise ValueError(
-            "Hech qanday reel topilmadi. Profil yopiq (private) yoki bo'sh bo'lishi mumkin. Yopiq profillardan yuklab olish imkonsiz."
+            "No reels found — this profile looks private or empty. "
+            "(Profil yopiq yoki bo'sh. Yopiq profillardan yuklab olish imkonsiz.)"
         )
 
     items = []
@@ -197,30 +234,44 @@ def fetch_reels(username, max_id=''):
 
 # ── Download link resolution ─────────────────────────────────────────────────
 
+def _quality_rank(u):
+    """Numeric sort key for an upstream `urls` entry — `quality` may be an
+    int (720) or a string ('720p'/'HD'); never compare raw values."""
+    q = u.get('quality')
+    if isinstance(q, (int, float)):
+        return q
+    m = re.search(r'\d+', str(q or ''))
+    return int(m.group()) if m else 0
+
+
 def _resolve_via_rapidapi(post_url):
     data = _rapidapi_post('/api/instagram/links', {'url': post_url})
-    # Response shape: [{"urls": [{url, name, subName, extension, quality}], "meta": {...}}]
+    # Response shape: [{"urls": [{url, name, subName, extension, quality}],
+    #                   "meta": {title, likeCount, commentCount, username, …},
+    #                   "pictureUrl": …}]
     entries = data if isinstance(data, list) else [data]
-    best = None
-    title = None
+    best = best_entry = None
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        title = title or (entry.get('meta') or {}).get('title')
         for u in entry.get('urls') or []:
             if not u.get('url'):
                 continue
-            if best is None or (u.get('quality') or 0) > (best.get('quality') or 0):
-                best = u
+            if best is None or _quality_rank(u) > _quality_rank(best):
+                best, best_entry = u, entry
     if not best:
         raise ValueError("No downloadable media in API response.")
-    meta = entry.get('meta') or {}
+    meta = best_entry.get('meta') or {}
     return {
         'video_url': best['url'],
         'extension': best.get('extension') or 'mp4',
         'quality': best.get('subName') or '',
-        'title': title or '',
-        'thumbnail': meta.get('thumbnail') or meta.get('image') or '',
+        'title': meta.get('title') or '',
+        'thumbnail': (best_entry.get('pictureUrl')
+                      or meta.get('thumbnail') or meta.get('image') or ''),
+        'like_count': meta.get('likeCount'),
+        'comment_count': meta.get('commentCount'),
+        'author': meta.get('username') or '',
         'source': 'api',
     }
 
@@ -248,6 +299,9 @@ def _resolve_via_ytdlp(post_url):
         'quality': f"{height}p" if height else 'HD',
         'title': info.get('title') or '',
         'thumbnail': info.get('thumbnail') or '',
+        'like_count': info.get('like_count'),
+        'comment_count': info.get('comment_count'),
+        'author': info.get('uploader') or '',
         'source': 'yt-dlp',
     }
 
@@ -258,6 +312,11 @@ def resolve_download(post_url):
     Tries RapidAPI first, falls back to yt-dlp per requirements.
     """
     code = parse_post_url(post_url)
+    if not code and _SHARE_URL_RE.match((post_url or '').strip()):
+        try:
+            code = parse_post_url(_resolve_share_url(post_url))
+        except requests.RequestException:
+            code = None
     if not code:
         raise ValueError("Enter a valid Instagram post/reel link.")
     canonical = f"https://www.instagram.com/reel/{code}/"
