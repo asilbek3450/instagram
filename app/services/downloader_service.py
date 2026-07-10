@@ -134,7 +134,7 @@ def _resolve_share_url(url):
     return resp.url
 
 
-# ── Reels listing ────────────────────────────────────────────────────────────
+# ── Profile feed listings (reels / posts / stories) ─────────────────────────
 
 def _best_thumbnail(media):
     candidates = (media.get('image_versions2') or {}).get('candidates') or []
@@ -148,14 +148,113 @@ def _best_thumbnail(media):
     return candidates[0].get('url')
 
 
+def _best_image(media):
+    """Full-size image URL — candidates come largest-first."""
+    candidates = (media.get('image_versions2') or {}).get('candidates') or []
+    return candidates[0].get('url') if candidates else None
+
+
+def _video_url(media):
+    video_versions = media.get('video_versions') or []
+    if video_versions and isinstance(video_versions, list):
+        return (video_versions[0] or {}).get('url')
+    return None
+
+
+def _normalize_username(username):
+    # Accept "@user", "@@user", "@ user", " @User " … — strip any leading
+    # @/whitespace mix so the upstream API always gets a bare username.
+    return re.sub(r'^[@\s]+', '', (username or '')).strip().lower()
+
+
+def _build_item(media, url_prefix='p', force_video=False):
+    """
+    Build a downloader item from an upstream media node.
+    Types: 'video' | 'image' | 'carousel' (upstream media_type 2 / 1 / 8).
+    `force_video` is used for the reels feed, where every item is a video
+    even when the listing carries no video_versions (resolved lazily).
+    """
+    code = media.get('code')
+    caption = media.get('caption')
+    caption_text = caption.get('text') if isinstance(caption, dict) else None
+    video_url = _video_url(media)
+    carousel = media.get('carousel_media')
+    media_type = media.get('media_type')
+
+    if not force_video and isinstance(carousel, list) and carousel:
+        item_type = 'carousel'
+    elif force_video or media_type == 2 or video_url:
+        item_type = 'video'
+    else:
+        item_type = 'image'
+
+    item = {
+        'id': media.get('pk'),
+        'code': code,
+        'type': item_type,
+        'post_url': f"https://www.instagram.com/{url_prefix}/{code}/",
+        'thumbnail': _best_thumbnail(media),
+        'caption': (caption_text or '')[:180] or None,
+        'play_count': media.get('play_count') or 0,
+        'like_count': media.get('like_count') or 0,
+        'comment_count': media.get('comment_count') or 0,
+        'counts_hidden': bool(media.get('like_and_view_counts_disabled')),
+        'width': media.get('original_width'),
+        'height': media.get('original_height'),
+    }
+    if item_type == 'video':
+        item['video_url'] = video_url
+    elif item_type == 'image':
+        item['image_url'] = _best_image(media)
+    else:
+        item['children'] = [{
+            'type': 'video' if _video_url(child) else 'image',
+            'video_url': _video_url(child),
+            'image_url': None if _video_url(child) else _best_image(child),
+            'thumbnail': _best_thumbnail(child),
+        } for child in carousel]
+    return item
+
+
+def _fetch_feed(kind, username, max_id=''):
+    """Shared reels/posts listing: {'items': […], 'next_max_id', 'has_more'}."""
+    data = _rapidapi_post(f'/api/instagram/{kind}',
+                          {'username': username, 'maxId': max_id or ''})
+    result = data.get('result') or {}
+    items = []
+    for edge in result.get('edges') or []:
+        node = edge.get('node') or {}
+        # The upstream API returns two shapes: fields nested under
+        # `node.media`, or flattened directly on `node`. Support both.
+        media = node.get('media') or node
+        if not media.get('code'):
+            continue
+        items.append(_build_item(
+            media,
+            url_prefix='reel' if kind == 'reels' else 'p',
+            force_video=(kind == 'reels'),
+        ))
+    page_info = result.get('page_info') or {}
+    return {
+        'username': username,
+        'items': items,
+        'next_max_id': page_info.get('end_cursor') or None,
+        'has_more': bool(page_info.get('has_next_page')),
+    }
+
+
+_NO_MEDIA_MSG = (
+    "No {kind} found for this profile. It may be private, misspelled "
+    "or temporarily unavailable. (Profil yopiq yoki mavjud emas.)"
+)
+
+
 def fetch_reels(username, max_id=''):
     """
     Return {'items': [...], 'next_max_id': str|None, 'has_more': bool}
     for a public profile's reels. Raises ValueError with a friendly message.
     """
-    # Accept "@user", "@@user", "@ user", " @User " … — strip any leading
-    # @/whitespace mix so the upstream API always gets a bare username.
-    username = re.sub(r'^[@\s]+', '', (username or '')).strip().lower()
+    username = _normalize_username(username)
     if not username:
         raise ValueError("Username is required.")
 
@@ -165,69 +264,97 @@ def fetch_reels(username, max_id=''):
         return cached
 
     try:
-        data = _rapidapi_post('/api/instagram/reels',
-                              {'username': username, 'maxId': max_id or ''})
+        payload = _fetch_feed('reels', username, max_id)
     except UpstreamError as e:
         if e.status == 429:
             raise
-        # The upstream API answers 500 "link not found" (and similar) for
-        # profiles it cannot list — private, renamed, or flaky. Map that to
-        # a friendly, accurate message instead of leaking the raw API text.
-        raise ValueError(
-            "No reels found for this profile. It may be private, misspelled "
-            "or temporarily unavailable. (Profil yopiq yoki mavjud emas.)"
-        ) from e
+        # The upstream /reels listing answers 500 "link not found" for some
+        # profiles even though they exist — their video posts still come
+        # through /posts, so fall back and keep only the videos.
+        try:
+            posts = fetch_posts(username, max_id)
+        except ValueError:
+            raise ValueError(_NO_MEDIA_MSG.format(kind='reels')) from e
+        payload = dict(posts)
+        payload['items'] = [i for i in posts['items'] if i['type'] == 'video']
+        payload['source'] = 'posts'
 
-    result = data.get('result') or {}
-    edges = result.get('edges') or []
-    if not edges and not max_id:
+    if not payload['items'] and not max_id:
         raise ValueError(
             "No reels found — this profile looks private or empty. "
             "(Profil yopiq yoki bo'sh. Yopiq profillardan yuklab olish imkonsiz.)"
         )
+    _cache_set(cache_key, payload)
+    return payload
+
+
+def fetch_posts(username, max_id=''):
+    """Profile's post feed — images, videos and carousels."""
+    username = _normalize_username(username)
+    if not username:
+        raise ValueError("Username is required.")
+
+    cache_key = ('posts', username, max_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        payload = _fetch_feed('posts', username, max_id)
+    except UpstreamError as e:
+        if e.status == 429:
+            raise
+        raise ValueError(_NO_MEDIA_MSG.format(kind='posts')) from e
+
+    if not payload['items'] and not max_id:
+        raise ValueError(
+            "No posts found — this profile looks private or empty. "
+            "(Profil yopiq yoki bo'sh. Yopiq profillardan yuklab olish imkonsiz.)"
+        )
+    _cache_set(cache_key, payload)
+    return payload
+
+
+def fetch_stories(username):
+    """
+    Profile's active stories (last 24h). Empty list is a normal result —
+    most profiles simply have no story right now.
+    """
+    username = _normalize_username(username)
+    if not username:
+        raise ValueError("Username is required.")
+
+    cache_key = ('stories', username)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = _rapidapi_post('/api/instagram/stories', {'username': username})
+    except UpstreamError as e:
+        if e.status == 429:
+            raise
+        raise ValueError(_NO_MEDIA_MSG.format(kind='stories')) from e
 
     items = []
-    for edge in edges:
-        node = edge.get('node') or {}
-        # The upstream API returns two shapes: fields nested under
-        # `node.media`, or flattened directly on `node`. Support both.
-        media = node.get('media') or node
-        code = media.get('code')
-        if not code:
+    for story in data.get('result') or []:
+        if not isinstance(story, dict) or not story.get('pk'):
             continue
-
-        # Direct video URL when the listing already carries it
-        # (`video_versions`) — saves a per-download /links API call.
-        video_url = None
-        video_versions = media.get('video_versions') or []
-        if video_versions and isinstance(video_versions, list):
-            video_url = (video_versions[0] or {}).get('url')
-
-        caption = media.get('caption')
-        caption_text = caption.get('text') if isinstance(caption, dict) else None
-
+        video_url = _video_url(story)
         items.append({
-            'id': media.get('pk'),
-            'code': code,
-            'post_url': f"https://www.instagram.com/reel/{code}/",
-            'thumbnail': _best_thumbnail(media),
+            'id': story.get('pk'),
+            'code': None,
+            'type': 'video' if video_url else 'image',
             'video_url': video_url,
-            'caption': (caption_text or '')[:180] or None,
-            'play_count': media.get('play_count') or 0,
-            'like_count': media.get('like_count') or 0,
-            'comment_count': media.get('comment_count') or 0,
-            'counts_hidden': bool(media.get('like_and_view_counts_disabled')),
-            'width': media.get('original_width'),
-            'height': media.get('original_height'),
+            'image_url': None if video_url else _best_image(story),
+            'thumbnail': _best_thumbnail(story),
+            'taken_at': story.get('taken_at'),
+            'width': story.get('original_width'),
+            'height': story.get('original_height'),
         })
 
-    page_info = result.get('page_info') or {}
-    payload = {
-        'username': username,
-        'items': items,
-        'next_max_id': page_info.get('end_cursor') or None,
-        'has_more': bool(page_info.get('has_next_page')),
-    }
+    payload = {'username': username, 'items': items,
+               'next_max_id': None, 'has_more': False}
     _cache_set(cache_key, payload)
     return payload
 

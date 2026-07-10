@@ -1,6 +1,8 @@
 """
 Public (no-auth) API for the Reels/media Downloader page:
   POST /api/downloader/reels    — list a profile's reels {username, max_id}
+  POST /api/downloader/posts    — list a profile's posts (images/videos/carousels)
+  POST /api/downloader/stories  — list a profile's active stories
   POST /api/downloader/resolve  — resolve a post/reel URL to a download link
   GET  /api/downloader/media    — proxy-stream an Instagram CDN file so the
                                   browser can save it (avoids CORS/hotlink
@@ -21,27 +23,66 @@ def _proxy_url(media_url, filename):
     )
 
 
-@downloader_bp.route('/reels', methods=['POST'])
-def reels():
-    data = request.get_json() or {}
+def _attach_download_urls(item):
+    """
+    Replace raw CDN URLs on a listing item (and its carousel children) with
+    ready-to-use proxied download links. Raw URLs never reach the client;
+    anything not on the CDN allowlist is dropped (resolved lazily instead).
+    """
+    name = item.get('code') or item.get('id') or 'media'
+
+    def link(url, filename):
+        if url and downloader_service.is_allowed_media_url(url):
+            return _proxy_url(url, filename)
+        return None
+
+    video_url = item.pop('video_url', None)
+    image_url = item.pop('image_url', None)
+    download = (link(video_url, f"instagram_{name}.mp4")
+                or link(image_url, f"instagram_{name}.jpg"))
+    if download:
+        item['download_url'] = download
+
+    for i, child in enumerate(item.get('children') or [], start=1):
+        child_video = child.pop('video_url', None)
+        child_image = child.pop('image_url', None)
+        ext = 'mp4' if child_video else 'jpg'
+        download = link(child_video or child_image, f"instagram_{name}_{i}.{ext}")
+        if download:
+            child['download_url'] = download
+
+
+def _feed_response(fetch):
     try:
-        payload = downloader_service.fetch_reels(
-            data.get('username', ''), data.get('max_id', '') or ''
-        )
-        # When the listing already carries a direct video URL, hand the
-        # frontend a ready-to-use proxied download link (no /resolve call
-        # and no extra upstream API request needed for that item).
+        payload = fetch()
         for item in payload['items']:
-            video_url = item.pop('video_url', None)
-            if video_url and downloader_service.is_allowed_media_url(video_url):
-                item['download_url'] = _proxy_url(
-                    video_url, f"instagram_{item['code']}.mp4"
-                )
+            _attach_download_urls(item)
         return jsonify(payload), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except requests.RequestException:
         return jsonify({'error': 'Upstream service unreachable. Try again later.'}), 502
+
+
+@downloader_bp.route('/reels', methods=['POST'])
+def reels():
+    data = request.get_json() or {}
+    return _feed_response(lambda: downloader_service.fetch_reels(
+        data.get('username', ''), data.get('max_id', '') or ''))
+
+
+@downloader_bp.route('/posts', methods=['POST'])
+def posts():
+    data = request.get_json() or {}
+    return _feed_response(lambda: downloader_service.fetch_posts(
+        data.get('username', ''), data.get('max_id', '') or ''))
+
+
+@downloader_bp.route('/stories', methods=['POST'])
+def stories():
+    data = request.get_json() or {}
+    return _feed_response(lambda: downloader_service.fetch_stories(
+        data.get('username', '')))
 
 
 @downloader_bp.route('/resolve', methods=['POST'])

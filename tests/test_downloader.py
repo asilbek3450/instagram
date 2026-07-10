@@ -6,6 +6,7 @@ tested against its SSRF host allowlist.
 """
 import unittest
 from unittest.mock import patch
+from urllib.parse import unquote
 
 from app import create_app, db
 from app.services import downloader_service
@@ -51,6 +52,61 @@ def _fake_reels_payload_flat_with_video():
             ],
             "page_info": {"end_cursor": None, "has_next_page": False},
         }
+    }
+
+
+def _fake_posts_payload():
+    """Post feed with one image, one carousel (image+video) and one video."""
+    return {
+        "result": {
+            "edges": [
+                {"node": {"media": {
+                    "pk": "301", "code": "IMG1", "media_type": 1,
+                    "image_versions2": {"candidates": [
+                        {"height": 1350, "width": 1080, "url": "https://scontent.cdninstagram.com/img_full.jpg"},
+                        {"height": 600, "width": 480, "url": "https://scontent.cdninstagram.com/img_mid.jpg"},
+                    ]},
+                    "like_count": 5, "comment_count": 1,
+                }}},
+                {"node": {"media": {
+                    "pk": "302", "code": "CAR1", "media_type": 8,
+                    "image_versions2": {"candidates": [
+                        {"height": 1080, "width": 1080, "url": "https://scontent.cdninstagram.com/car_cover.jpg"},
+                    ]},
+                    "carousel_media": [
+                        {"media_type": 1, "image_versions2": {"candidates": [
+                            {"height": 1080, "width": 1080, "url": "https://scontent.cdninstagram.com/car_1.jpg"}]}},
+                        {"media_type": 2,
+                         "video_versions": [{"url": "https://scontent.cdninstagram.com/car_2.mp4"}],
+                         "image_versions2": {"candidates": [
+                             {"height": 1080, "width": 1080, "url": "https://scontent.cdninstagram.com/car_2_thumb.jpg"}]}},
+                    ],
+                    "like_count": 9, "comment_count": 2,
+                }}},
+                {"node": {"media": {
+                    "pk": "303", "code": "VID1", "media_type": 2,
+                    "video_versions": [{"url": "https://scontent.cdninstagram.com/post_vid.mp4"}],
+                    "image_versions2": {"candidates": [
+                        {"height": 1080, "width": 1080, "url": "https://scontent.cdninstagram.com/vid_thumb.jpg"}]},
+                    "play_count": 100, "like_count": 3, "comment_count": 0,
+                }}},
+            ],
+            "page_info": {"end_cursor": "P_CURSOR", "has_next_page": True},
+        }
+    }
+
+
+def _fake_stories_payload():
+    return {
+        "result": [
+            {"pk": "9001", "taken_at": 1783600000,
+             "video_versions": [{"url": "https://scontent.cdninstagram.com/story_v.mp4"}],
+             "image_versions2": {"candidates": [
+                 {"height": 1920, "width": 1080, "url": "https://scontent.cdninstagram.com/story_v_thumb.jpg"}]}},
+            {"pk": "9002", "taken_at": 1783600100,
+             "image_versions2": {"candidates": [
+                 {"height": 1920, "width": 1080, "url": "https://scontent.cdninstagram.com/story_img.jpg"}]}},
+        ]
     }
 
 
@@ -183,16 +239,75 @@ class DownloaderServiceTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn('No reels found', res.get_json()['error'])
 
-    @patch('app.services.downloader_service.requests.post',
-           return_value=FakeResp({"success": False,
-                                  "message": "The download link not found."}, status=500))
-    def test_reels_upstream_500_is_friendly_error(self, mock_post):
-        """Upstream answers 500 'link not found' for some profiles — the raw
-        API text must not leak to the user."""
-        res = self.client.post('/api/downloader/reels', json={'username': 'flaky.profile'})
+    def test_reels_falls_back_to_posts_when_upstream_flaky(self):
+        """Some profiles 500 on /reels but list fine via /posts — the reels
+        tab must then show that profile's video posts instead of an error."""
+        def fake_post(url, **kwargs):
+            if url.endswith('/api/instagram/reels'):
+                return FakeResp({"success": False,
+                                 "message": "The download link not found."}, status=500)
+            return FakeResp(_fake_posts_payload())
+
+        with patch('app.services.downloader_service.requests.post', side_effect=fake_post):
+            res = self.client.post('/api/downloader/reels', json={'username': 'flaky.profile'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        # Only the video post survives the filter
+        self.assertEqual([i['code'] for i in data['items']], ['VID1'])
+        self.assertEqual(data['source'], 'posts')
+
+    def test_reels_upstream_500_and_no_posts_is_friendly_error(self):
+        with patch('app.services.downloader_service.requests.post',
+                   return_value=FakeResp({"message": "The download link not found."}, status=500)):
+            res = self.client.post('/api/downloader/reels', json={'username': 'gone.profile'})
         self.assertEqual(res.status_code, 400)
         self.assertIn('No reels found', res.get_json()['error'])
         self.assertNotIn('download link', res.get_json()['error'])
+
+    # ── Posts listing ────────────────────────────────────────────────────
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp(_fake_posts_payload()))
+    def test_posts_endpoint_types_and_download_urls(self, mock_post):
+        res = self.client.post('/api/downloader/posts', json={'username': 'someuser'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        img, car, vid = data['items']
+
+        self.assertEqual(img['type'], 'image')
+        self.assertIn('instagram_IMG1.jpg', img['download_url'])
+        self.assertIn('img_full.jpg', unquote(img['download_url']))
+        self.assertNotIn('image_url', img)
+
+        self.assertEqual(car['type'], 'carousel')
+        self.assertEqual([c['type'] for c in car['children']], ['image', 'video'])
+        self.assertIn('instagram_CAR1_1.jpg', car['children'][0]['download_url'])
+        self.assertIn('instagram_CAR1_2.mp4', car['children'][1]['download_url'])
+
+        self.assertEqual(vid['type'], 'video')
+        self.assertIn('instagram_VID1.mp4', vid['download_url'])
+        self.assertEqual(data['next_max_id'], 'P_CURSOR')
+
+    # ── Stories listing ──────────────────────────────────────────────────
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp(_fake_stories_payload()))
+    def test_stories_endpoint(self, mock_post):
+        res = self.client.post('/api/downloader/stories', json={'username': '@someuser'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        video, image = data['items']
+        self.assertEqual(video['type'], 'video')
+        self.assertIn('instagram_9001.mp4', video['download_url'])
+        self.assertEqual(image['type'], 'image')
+        self.assertIn('instagram_9002.jpg', image['download_url'])
+        self.assertFalse(data['has_more'])
+
+    @patch('app.services.downloader_service.requests.post',
+           return_value=FakeResp({"result": []}))
+    def test_stories_empty_is_ok_not_error(self, mock_post):
+        """No active stories is a normal state, not a 400."""
+        res = self.client.post('/api/downloader/stories', json={'username': 'quietuser'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()['items'], [])
 
     def test_reels_requires_username(self):
         res = self.client.post('/api/downloader/reels', json={})

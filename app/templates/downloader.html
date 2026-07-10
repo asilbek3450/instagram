@@ -194,7 +194,43 @@
             color: var(--color-primary);
         }
         #preview-video { width: 100%; max-height: 72vh; border-radius: 12px; background: #000; }
+        #preview-image { width: 100%; max-height: 72vh; border-radius: 12px; background: #000; object-fit: contain; }
         .btn-download-sm { white-space: nowrap; }
+
+        /* Media type tabs (Reels / Posts / Stories) */
+        #media-tabs .nav-link {
+            color: var(--text-secondary); background: var(--bg-card);
+            border: 1px solid var(--border-card); border-radius: 30px;
+            padding: .45rem 1.2rem; font-weight: 600;
+        }
+        #media-tabs .nav-link.active {
+            background: linear-gradient(135deg, hsl(var(--hue-primary),85%,55%), hsl(var(--hue-secondary),85%,55%));
+            color: #fff; border-color: transparent;
+        }
+
+        /* Card type badge (carousel count / photo icon) */
+        .reel-type-badge {
+            position: absolute; top: 8px; right: 8px;
+            font-size: .72rem; font-weight: 600; color: #fff;
+            background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+            border-radius: 20px; padding: 2px 9px;
+        }
+
+        /* Carousel navigation inside the preview modal */
+        .carousel-nav-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            width: 38px; height: 38px; border-radius: 50%; border: 0;
+            background: rgba(0,0,0,.55); color: #fff; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .carousel-nav-btn:hover { background: rgba(0,0,0,.8); }
+        .carousel-nav-prev { left: 10px; }
+        .carousel-nav-next { right: 10px; }
+        #carousel-counter {
+            position: absolute; top: 10px; right: 10px; z-index: 2;
+            font-size: .75rem; font-weight: 600; color: #fff;
+            background: rgba(0,0,0,.55); border-radius: 20px; padding: 2px 10px;
+        }
     </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
@@ -231,7 +267,7 @@
                 </h1>
                            <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;">
                     Paste a reel link to download it, or type a username to browse
-                    and save any public profile's reels in HD.
+                    and save any public profile's reels, posts and stories in HD.
                 </p>
 
                 <!-- Search Input -->
@@ -252,7 +288,7 @@
                     </form>
                     
                     <div class="mt-3 text-center small text-secondary">
-                        <span class="dl-chip" onclick="fillExample('aytishnik.uz')"><i class="bi bi-person me-1"></i>@username &rarr; browse reels</span>
+                        <span class="dl-chip" onclick="fillExample('aytishnik.uz')"><i class="bi bi-person me-1"></i>@username &rarr; reels · posts · stories</span>
                         <span class="dl-chip" onclick="fillExample('https://www.instagram.com/reel/')"><i class="bi bi-link-45deg me-1"></i>reel link &rarr; download reel</span>
                     </div>
                 </div>
@@ -277,6 +313,12 @@
                 <i class="bi bi-box-arrow-up-right me-1"></i>Open profile
             </a>
         </div>
+
+        <ul class="nav nav-pills gap-2 mb-4 d-none" id="media-tabs">
+            <li class="nav-item"><button class="nav-link active" data-tab="reels" onclick="switchTab('reels')"><i class="bi bi-camera-reels me-1"></i>Reels</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="posts" onclick="switchTab('posts')"><i class="bi bi-grid-3x3-gap me-1"></i>Posts</button></li>
+            <li class="nav-item"><button class="nav-link" data-tab="stories" onclick="switchTab('stories')"><i class="bi bi-clock-history me-1"></i>Stories</button></li>
+        </ul>
 
         <div class="row g-3" id="results-grid"></div>
 
@@ -330,12 +372,21 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <video id="preview-video" controls playsinline></video>
+                    <div class="position-relative">
+                        <video id="preview-video" controls playsinline></video>
+                        <img id="preview-image" class="d-none" alt="Preview">
+                        <button type="button" class="carousel-nav-btn carousel-nav-prev d-none" id="carousel-prev" onclick="stepCarousel(-1)"><i class="bi bi-chevron-left"></i></button>
+                        <button type="button" class="carousel-nav-btn carousel-nav-next d-none" id="carousel-next" onclick="stepCarousel(1)"><i class="bi bi-chevron-right"></i></button>
+                        <span id="carousel-counter" class="d-none"></span>
+                    </div>
                 </div>
-                <div class="modal-footer border-0 pt-0">
-                    <a class="btn gradient-btn w-100" id="preview-download-btn" href="#">
-                        <i class="bi bi-download me-2"></i>Download MP4
+                <div class="modal-footer border-0 pt-0 d-flex gap-2">
+                    <a class="btn gradient-btn flex-grow-1" id="preview-download-btn" href="#">
+                        <i class="bi bi-download me-2"></i>Download
                     </a>
+                    <button type="button" class="btn btn-outline-secondary d-none" id="preview-download-all-btn" onclick="downloadCarouselAll()">
+                        <i class="bi bi-collection me-1"></i>All
+                    </button>
                 </div>
             </div>
         </div>
@@ -360,10 +411,14 @@
 
     // ── State ───────────────────────────────────────────────────────────
     let currentUsername = null;
+    let currentTab = 'reels';  // 'reels' | 'posts' | 'stories'
     let nextMaxId = null;
     let loading = false;
-    const resolveCache = {};   // code -> {download_url, filename, ...}
-    const itemsByCode = {};    // code -> reels list item (may carry download_url)
+    const resolveCache = {};   // key -> {download_url, filename, ...}
+    const itemsByKey = {};     // key -> listing item (may carry download_url)
+
+    // Stories have no shortcode — key those by their numeric id instead.
+    function itemKey(item) { return item.code || ('s' + item.id); }
 
     const grid = document.getElementById('results-grid');
     const alertBox = document.getElementById('dl-alert');
@@ -416,10 +471,10 @@
             await directDownload(raw);
         } else {
             // A pasted profile URL (instagram.com/username/) browses that
-            // profile's reels; anything else is treated as a username —
+            // profile's media; anything else is treated as a username —
             // with or without a leading @ (also "@@user", "@ user").
             const profile = raw.match(/instagram\.com\/@?([A-Za-z0-9._]+)\/?/i);
-            await loadReels(profile ? profile[1] : raw.replace(/^[@\s]+/, ''), '', false);
+            await loadFeed('reels', profile ? profile[1] : raw.replace(/^[@\s]+/, ''), '', false);
         }
     });
 
@@ -441,6 +496,7 @@
 
             document.getElementById('profile-header').classList.remove('d-flex');
             document.getElementById('profile-header').classList.add('d-none');
+            document.getElementById('media-tabs').classList.add('d-none');
 
             // The backend returns the canonical shortcode (works for /share/
             // links too); fall back to parsing it out of the pasted URL.
@@ -448,6 +504,7 @@
             const item = {
                 thumbnail: info.thumbnail,
                 code: code,
+                type: 'video',
                 caption: info.title,
                 post_url: code ? 'https://www.instagram.com/reel/' + code + '/' : url,
                 counts_hidden: true,
@@ -456,7 +513,7 @@
             };
 
             resolveCache[code] = info;
-            itemsByCode[code] = item;
+            itemsByKey[code] = item;
             grid.innerHTML = cardHtml(item);
         } catch (err) {
             removeSkeletons();
@@ -466,25 +523,28 @@
         }
     }
 
-    // ── Username → reels grid ───────────────────────────────────────────
-    async function loadReels(username, maxId, append) {
+    // ── Username → media grid (reels / posts / stories tabs) ───────────
+    async function loadFeed(tab, username, maxId, append) {
         setBusy(true);
+        clearAlert();
         loadMoreBtn.classList.add('d-none');
         document.getElementById('how-it-works').classList.add('d-none');
         if (!append) grid.innerHTML = '';
         grid.insertAdjacentHTML('beforeend', skeletons(append ? 4 : 8));
 
         try {
-            const res = await fetch('/api/downloader/reels', {
+            const body = tab === 'stories' ? { username } : { username, max_id: maxId || '' };
+            const res = await fetch('/api/downloader/' + tab, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, max_id: maxId || '' })
+                body: JSON.stringify(body)
             });
             const data = await res.json();
             removeSkeletons();
             if (!res.ok) throw new Error(data.error || 'Something went wrong.');
 
             currentUsername = data.username;
+            currentTab = tab;
             nextMaxId = data.next_max_id;
 
             const header = document.getElementById('profile-header');
@@ -492,15 +552,24 @@
             header.classList.add('d-flex');
             document.getElementById('profile-username').textContent = '@' + data.username;
             document.getElementById('profile-open-link').href = 'https://www.instagram.com/' + data.username + '/';
+            const tabs = document.getElementById('media-tabs');
+            tabs.classList.remove('d-none');
+            tabs.querySelectorAll('.nav-link').forEach(btn =>
+                btn.classList.toggle('active', btn.dataset.tab === tab));
 
             data.items.forEach(item => {
-                itemsByCode[item.code] = item;
+                itemsByKey[itemKey(item)] = item;
                 grid.insertAdjacentHTML('beforeend', cardHtml(item));
             });
-            document.getElementById('profile-meta').textContent = grid.children.length + ' reels loaded';
+            document.getElementById('profile-meta').textContent =
+                grid.children.length + ' ' + (tab === 'stories' ? 'active stories' : tab) + ' loaded';
 
             if (data.has_more && nextMaxId) loadMoreBtn.classList.remove('d-none');
-            if (!append && data.items.length === 0) showAlert('This profile has no public reels.');
+            if (!append && data.items.length === 0) {
+                showAlert(tab === 'stories'
+                    ? 'No active stories right now — stories disappear after 24 hours.'
+                    : 'Nothing found in this tab.', 'info');
+            }
         } catch (err) {
             removeSkeletons();
             showAlert(err.message);
@@ -508,37 +577,60 @@
             setBusy(false);
         }
     }
-    function loadMore() { if (currentUsername && nextMaxId) loadReels(currentUsername, nextMaxId, true); }
+    function switchTab(tab) {
+        if (loading || !currentUsername || tab === currentTab) return;
+        loadFeed(tab, currentUsername, '', false);
+    }
+    function loadMore() { if (currentUsername && nextMaxId) loadFeed(currentTab, currentUsername, nextMaxId, true); }
 
     function cardHtml(item) {
+        const key = itemKey(item);
         const thumb = item.thumbnail
-            ? `<img class="reel-thumb" src="${esc(item.thumbnail)}" loading="lazy" alt="reel"
+            ? `<img class="reel-thumb" src="${esc(item.thumbnail)}" loading="lazy" alt="media"
                     onerror="this.parentElement.style.background='linear-gradient(135deg,#2b2f55,#1a1d3a)'; this.remove();">`
             : '';
+
         const chips = [];
-        if (!item.counts_hidden) chips.push(`<span class="reel-stat"><i class="bi bi-play-fill"></i> ${fmt(item.play_count)}</span>`);
-        if (!item.counts_hidden || item.like_count > 0) chips.push(`<span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>`);
-        chips.push(`<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`);
-        const stats = chips.join('');
+        if (item.counts_hidden) {
+            if (item.like_count > 0) chips.push(`<span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>`);
+            if (item.comment_count > 0) chips.push(`<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`);
+        } else {
+            if (item.play_count > 0) chips.push(`<span class="reel-stat"><i class="bi bi-play-fill"></i> ${fmt(item.play_count)}</span>`);
+            if (item.like_count !== undefined) chips.push(`<span class="reel-stat"><i class="bi bi-heart-fill"></i> ${fmt(item.like_count)}</span>`);
+            if (item.comment_count !== undefined) chips.push(`<span class="reel-stat"><i class="bi bi-chat"></i> ${fmt(item.comment_count)}</span>`);
+        }
+
+        const badge = item.type === 'carousel'
+            ? `<span class="reel-type-badge"><i class="bi bi-images"></i> ${(item.children || []).length}</span>`
+            : item.type === 'image'
+                ? `<span class="reel-type-badge"><i class="bi bi-image"></i></span>`
+                : '';
+        const previewIcon = item.type === 'video' ? 'bi-play-fill' : 'bi-eye-fill';
+
+        // Stories have no post page — link to the profile's stories instead.
+        const openUrl = item.post_url ||
+            (currentUsername ? `https://www.instagram.com/stories/${currentUsername}/${item.id}/` : '#');
+
         return `
         <div class="col-6 col-md-4 col-lg-3">
             <div class="reel-card">
                 <div class="reel-thumb-wrap">
                     ${thumb}
+                    ${badge}
                     <div class="reel-overlay">
-                        <button class="reel-play-btn" onclick="openPreview('${esc(item.code)}')" title="Preview">
-                            <i class="bi bi-play-fill"></i>
+                        <button class="reel-play-btn" onclick="openPreview('${esc(key)}')" title="Preview">
+                            <i class="bi ${previewIcon}"></i>
                         </button>
                     </div>
-                    <div class="reel-stats">${stats}</div>
+                    <div class="reel-stats">${chips.join('')}</div>
                 </div>
                 ${item.caption ? `<div class="px-2 pt-2 small text-secondary text-truncate" title="${esc(item.caption)}">${esc(item.caption)}</div>` : ''}
                 <div class="p-2 d-flex gap-2">
-                    <button class="btn gradient-btn btn-sm flex-grow-1 btn-download-sm" id="dl-btn-${esc(item.code)}"
-                            onclick="downloadReel('${esc(item.code)}')">
-                        <i class="bi bi-download me-1"></i>Download
+                    <button class="btn gradient-btn btn-sm flex-grow-1 btn-download-sm" id="dl-btn-${esc(key)}"
+                            onclick="downloadItem('${esc(key)}')">
+                        <i class="bi bi-download me-1"></i>Download${item.type === 'carousel' ? ' all' : ''}
                     </button>
-                    <a class="btn btn-outline-secondary btn-sm" href="${esc(item.post_url)}" target="_blank" rel="noopener" title="Open on Instagram">
+                    <a class="btn btn-outline-secondary btn-sm" href="${esc(openUrl)}" target="_blank" rel="noopener" title="Open on Instagram">
                         <i class="bi bi-instagram"></i>
                     </a>
                 </div>
@@ -557,24 +649,27 @@
         if (!res.ok) throw new Error(data.error || 'Could not fetch this media.');
         return data;
     }
-    async function resolveCode(code) {
-        if (!code) throw new Error('Could not identify this reel. Paste its link and try again.');
-        if (resolveCache[code]) return resolveCache[code];
-        // If the reels listing already delivered a direct download link,
-        // use it — no extra backend/API round-trip needed.
-        const item = itemsByCode[code];
+    async function resolveKey(key) {
+        if (!key) throw new Error('Could not identify this media. Paste its link and try again.');
+        if (resolveCache[key]) return resolveCache[key];
+        // If the listing already delivered a direct download link, use it —
+        // no extra backend/API round-trip needed (all images and stories,
+        // plus videos whose listing carried video_versions).
+        const item = itemsByKey[key];
         if (item && item.download_url) {
-            resolveCache[code] = {
+            const ext = item.type === 'image' ? '.jpg' : '.mp4';
+            resolveCache[key] = {
                 proxied: true,
                 download_url: item.download_url,
-                filename: 'instagram_' + code + '.mp4',
+                filename: 'instagram_' + (item.code || item.id) + ext,
                 title: item.caption || '',
                 quality: item.height ? item.height + 'p' : 'HD',
             };
-            return resolveCache[code];
+            return resolveCache[key];
         }
-        const info = await resolveUrl('https://www.instagram.com/reel/' + code + '/');
-        resolveCache[code] = info;
+        if (!item || !item.code) throw new Error('This media has no downloadable file.');
+        const info = await resolveUrl('https://www.instagram.com/reel/' + item.code + '/');
+        resolveCache[key] = info;
         return info;
     }
     function triggerDownload(info) {
@@ -588,13 +683,26 @@
         a.remove();
     }
 
-    async function downloadReel(code) {
-        const btn = document.getElementById('dl-btn-' + code);
+    // Carousel: download every slide, staggered so the browser doesn't
+    // swallow the follow-up clicks (it may still ask to allow multiple files).
+    async function downloadChildren(item) {
+        const children = (item.children || []).filter(c => c.download_url);
+        if (!children.length) throw new Error('No downloadable media in this post.');
+        for (let i = 0; i < children.length; i++) {
+            triggerDownload({ proxied: true, download_url: children[i].download_url });
+            if (i < children.length - 1) await new Promise(r => setTimeout(r, 700));
+        }
+    }
+
+    async function downloadItem(key) {
+        const btn = document.getElementById('dl-btn-' + key);
         const original = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         try {
-            triggerDownload(await resolveCode(code));
+            const item = itemsByKey[key];
+            if (item && item.type === 'carousel') await downloadChildren(item);
+            else triggerDownload(await resolveKey(key));
             btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved';
             setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
         } catch (err) {
@@ -604,13 +712,18 @@
         }
     }
 
-    // ── Preview modal ───────────────────────────────────────────────────
+    // ── Preview modal (video / image / carousel) ────────────────────────
     const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
     const previewVideo = document.getElementById('preview-video');
+    const previewImage = document.getElementById('preview-image');
+    let previewEntries = [];   // [{type, src, download, info}]
+    let previewIndex = 0;
+
     document.getElementById('previewModal').addEventListener('hidden.bs.modal', () => {
         previewVideo.pause();
         previewVideo.removeAttribute('src');
         previewVideo.load();
+        previewImage.removeAttribute('src');
     });
 
     // Hiding immediately after show() races Bootstrap's fade transition and
@@ -629,23 +742,97 @@
             '<i class="bi bi-exclamation-triangle me-2"></i>Preview unavailable — try Download';
     });
 
-    async function openPreview(code) {
+    function renderPreviewEntry() {
+        const entry = previewEntries[previewIndex];
+        if (entry.type === 'video') {
+            previewImage.classList.add('d-none');
+            previewImage.removeAttribute('src');
+            previewVideo.classList.remove('d-none');
+            previewVideo.src = entry.src;
+            previewVideo.play().catch(() => {});
+        } else {
+            previewVideo.pause();
+            previewVideo.removeAttribute('src');
+            previewVideo.load();
+            previewVideo.classList.add('d-none');
+            previewImage.src = entry.src;
+            previewImage.classList.remove('d-none');
+        }
+
+        const multi = previewEntries.length > 1;
+        document.getElementById('carousel-prev').classList.toggle('d-none', !multi);
+        document.getElementById('carousel-next').classList.toggle('d-none', !multi);
+        const counter = document.getElementById('carousel-counter');
+        counter.classList.toggle('d-none', !multi);
+        counter.textContent = (previewIndex + 1) + ' / ' + previewEntries.length;
+
+        const dlBtn = document.getElementById('preview-download-btn');
+        if (entry.info || entry.download) {
+            dlBtn.classList.remove('disabled');
+            dlBtn.onclick = (e) => {
+                e.preventDefault();
+                triggerDownload(entry.info || { proxied: true, download_url: entry.download });
+            };
+        } else {
+            dlBtn.classList.add('disabled');
+            dlBtn.onclick = (e) => e.preventDefault();
+        }
+    }
+
+    function stepCarousel(dir) {
+        if (!previewEntries.length) return;
+        previewIndex = (previewIndex + dir + previewEntries.length) % previewEntries.length;
+        renderPreviewEntry();
+    }
+
+    function downloadCarouselAll() {
+        const item = previewEntries.itemRef;
+        if (item) downloadChildren(item).catch(err => showAlert(err.message));
+    }
+
+    async function openPreview(key) {
         clearAlert();
         const dlBtn = document.getElementById('preview-download-btn');
+        const allBtn = document.getElementById('preview-download-all-btn');
         document.getElementById('preview-title').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading…';
         dlBtn.classList.add('disabled');
         dlBtn.onclick = (e) => e.preventDefault();
+        allBtn.classList.add('d-none');
+        ['carousel-prev', 'carousel-next', 'carousel-counter'].forEach(id =>
+            document.getElementById(id).classList.add('d-none'));
+        previewVideo.classList.remove('d-none');
         previewVideo.removeAttribute('src');
         previewVideo.load();
+        previewImage.classList.add('d-none');
+        previewImage.removeAttribute('src');
         previewModal.show();
+
         try {
-            const info = await resolveCode(code);
-            previewVideo.src = info.proxied ? info.download_url : info.direct_url;
-            previewVideo.play().catch(() => {});
+            const item = itemsByKey[key] || {};
+            let title = item.caption || '';
+
+            if (item.type === 'carousel') {
+                previewEntries = (item.children || [])
+                    .map(c => ({ type: c.type, src: c.download_url || c.thumbnail, download: c.download_url }))
+                    .filter(e => e.src);
+                if (!previewEntries.length) throw new Error('No previewable media in this post.');
+                previewEntries.itemRef = item;   // for "All" download
+                allBtn.classList.remove('d-none');
+                allBtn.innerHTML = '<i class="bi bi-collection me-1"></i>All (' + previewEntries.length + ')';
+            } else if (item.type === 'image') {
+                const src = item.download_url || item.thumbnail;
+                if (!src) throw new Error('No previewable media.');
+                previewEntries = [{ type: 'image', src, download: item.download_url }];
+            } else {
+                const info = await resolveKey(key);
+                previewEntries = [{ type: 'video', src: info.proxied ? info.download_url : info.direct_url, info }];
+                title = title || info.title;
+            }
+
+            previewIndex = 0;
+            renderPreviewEntry();
             document.getElementById('preview-title').innerHTML =
-                '<i class="bi bi-play-circle me-2"></i>' + esc((info.title || 'Reel preview').slice(0, 70));
-            dlBtn.classList.remove('disabled');
-            dlBtn.onclick = (e) => { e.preventDefault(); triggerDownload(info); };
+                '<i class="bi bi-play-circle me-2"></i>' + esc((title || 'Preview').slice(0, 70));
         } catch (err) {
             hidePreviewModal();
             showAlert(err.message);
