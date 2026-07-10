@@ -57,3 +57,27 @@ class Notification(db.Model):
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat()
         }
+
+
+class TelegramUser(db.Model):
+    __tablename__ = 'telegram_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(120), nullable=True)
+    first_name = db.Column(db.String(120), nullable=True)
+    last_name = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_blocked = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'chat_id': self.chat_id,
+            'username': self.username,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'created_at': self.created_at.isoformat(),
+            'is_blocked': self.is_blocked
+        }
+

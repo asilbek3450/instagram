@@ -243,9 +243,23 @@
             </a>
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <a class="btn btn-outline-secondary btn-sm px-3 d-none d-sm-inline-block" href="/">
-                    <i class="bi bi-graph-up-arrow me-1"></i>Analytics
+                    <i class="bi bi-graph-up-arrow me-1"></i><span data-i18n="dl_nav_analytics">Analytics</span>
                 </a>
-                <a class="btn gradient-btn btn-sm px-3 d-none d-sm-inline-block" href="/register">Get Started</a>
+                <a class="btn gradient-btn btn-sm px-3 d-none d-sm-inline-block" href="/register" data-i18n="dl_nav_getstarted">Get Started</a>
+
+                <!-- Language Switcher -->
+                <div class="dropdown hover-dropdown" id="lang-selector-container">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1" type="button" aria-expanded="false" id="lang-btn">
+                        <img id="lang-flag-img" src="https://flagcdn.com/w20/gb.png" alt="lang" width="18" style="border-radius:2px;">
+                        <span id="lang-flag-label">EN</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-card lang-dropdown">
+                        <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="changeLanguage('en'); return false;"><img src="https://flagcdn.com/w20/gb.png" width="18" alt="EN"> English</a></li>
+                        <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="changeLanguage('uz'); return false;"><img src="https://flagcdn.com/w20/uz.png" width="18" alt="UZ"> O'zbek</a></li>
+                        <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="changeLanguage('ru'); return false;"><img src="https://flagcdn.com/w20/ru.png" width="18" alt="RU"> Русский</a></li>
+                    </ul>
+                </div>
+
                 <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="dlToggleTheme()" title="Toggle Theme">
                     <i class="bi bi-sun" id="theme-icon"></i>
                 </button>
@@ -260,12 +274,12 @@
         <div class="container position-relative" style="z-index: 1;">
             <div class="text-center mx-auto" style="max-width: 720px;">
                 <span class="badge badge-glow-primary px-3 py-2 mb-3 rounded-pill fw-bold">
-                    <i class="bi bi-download me-1"></i>Free Tool · No Login Required
+                    <i class="bi bi-download me-1"></i><span data-i18n="dl_free_badge">Free Tool · No Login Required</span>
                 </span>
                 <h1 class="display-4 fw-bold mb-3" style="line-height: 1.15;">
-                    Insta, TikTok & YouTube <span class="gradient-text">Downloader</span>
+                    <span data-i18n="dl_hero_title">Insta, TikTok & YouTube</span> <span class="gradient-text" data-i18n="dl_hero_title_span">Downloader</span>
                 </h1>
-                <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;">
+                <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;" data-i18n="dl_hero_desc">
                     Paste an Instagram, TikTok or YouTube link to download it, or type a username to browse
                     and save any public profile's reels, posts and stories in HD.
                 </p>
@@ -367,7 +381,7 @@
     <!-- Footer -->
     <footer class="footer py-3 text-center border-top border-card mt-auto" style="background: var(--bg-card);">
         <div class="container text-muted small">
-            &copy; 2026 InstaTrack Pro · For personal use only — respect creators' copyrights.
+            &copy; 2026 InstaTrack Pro · Asilbek Mirolimov — respect creators' copyrights.
         </div>
     </footer>
 
@@ -401,6 +415,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
     <script>
     // ── Theme toggle (standalone page — no app.js dependency) ──────────
     function dlApplyThemeIcon() {

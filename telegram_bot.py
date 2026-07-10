@@ -27,7 +27,9 @@ from aiogram.types import (
     MenuButtonWebApp,
 )
 
-from app import create_app
+from app import create_app, db
+from app.models import TelegramUser
+from datetime import datetime, date
 from app.services import downloader_service
 
 log = logging.getLogger('telegram_bot')
@@ -76,8 +78,63 @@ def save_channels(channels):
 
 class AdminStates(StatesGroup):
     waiting_for_channel = State()
+    waiting_for_broadcast = State()
+
+
+# ── Database Helpers for Telegram Users ──────────────────────────────────────
+
+def db_save_telegram_user(chat_id, username, first_name, last_name):
+    chat_id_str = str(chat_id)
+    user = TelegramUser.query.filter_by(chat_id=chat_id_str).first()
+    if not user:
+        user = TelegramUser(
+            chat_id=chat_id_str,
+            username=username,
+            first_name=first_name,
+            last_name=last_name
+        )
+        db.session.add(user)
+    else:
+        user.username = username
+        user.first_name = first_name
+        user.last_name = last_name
+        user.is_blocked = False
+    db.session.commit()
+
+def db_get_telegram_users_stats():
+    total = TelegramUser.query.count()
+    active = TelegramUser.query.filter_by(is_blocked=False).count()
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_count = TelegramUser.query.filter(TelegramUser.created_at >= today_start).count()
+    return {"total": total, "active": active, "today": today_count}
+
+def db_get_all_active_telegram_user_ids():
+    users = TelegramUser.query.filter_by(is_blocked=False).all()
+    return [u.chat_id for u in users]
+
+def db_mark_telegram_user_blocked(chat_id):
+    chat_id_str = str(chat_id)
+    user = TelegramUser.query.filter_by(chat_id=chat_id_str).first()
+    if user:
+        user.is_blocked = True
+        db.session.commit()
 
 # ── Middlewares ──────────────────────────────────────────────────────────────
+
+class TrackUserMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user = data.get('event_from_user')
+        if user:
+            # Save or update user info in background thread
+            await asyncio.to_thread(
+                _in_app_context,
+                db_save_telegram_user,
+                chat_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name
+            )
+        return await handler(event, data)
 
 class CheckSubscriptionMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
@@ -128,8 +185,13 @@ class CheckSubscriptionMiddleware(BaseMiddleware):
 
         return await handler(event, data)
 
+# Register TrackUserMiddleware first so users are always tracked
+dp.message.outer_middleware(TrackUserMiddleware())
+dp.callback_query.outer_middleware(TrackUserMiddleware())
+
 dp.message.middleware(CheckSubscriptionMiddleware())
 dp.callback_query.middleware(CheckSubscriptionMiddleware())
+
 
 # ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -333,7 +395,9 @@ async def cmd_admin(message: Message, state: FSMContext):
     kb = [
         [InlineKeyboardButton(text="📋 Kanallarni ko'rish", callback_data="admin:list")],
         [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="admin:add")],
-        [InlineKeyboardButton(text="➖ Kanalni o'chirish", callback_data="admin:del")]
+        [InlineKeyboardButton(text="➖ Kanalni o'chirish", callback_data="admin:del")],
+        [InlineKeyboardButton(text="👥 Foydalanuvchilar soni", callback_data="admin:users_count")],
+        [InlineKeyboardButton(text="📣 Reklama yuborish", callback_data="admin:broadcast")]
     ]
     await message.answer("👑 <b>Admin Panel</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
@@ -384,14 +448,34 @@ async def on_admin_action(callback: CallbackQuery, state: FSMContext):
         text = "O'chirmoqchi bo'lgan kanalni tanlang:" if channels else "Kanallar qolmadi."
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
         
+    elif action == 'users_count':
+        stats = await asyncio.to_thread(_in_app_context, db_get_telegram_users_stats)
+        text = (
+            f"👥 <b>Bot foydalanuvchilari statistikasi:</b>\n\n"
+            f"📈 Jami a'zolar: {stats['total']}\n"
+            f"🟢 Faol a'zolar (bloklamagan): {stats['active']}\n"
+            f"📅 Bugun qo'shilganlar: {stats['today']}"
+        )
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:back")]]))
+
+    elif action == 'broadcast':
+        await callback.message.edit_text("📣 <b>Reklama yuborish bo'limi</b>\n\n"
+                                         "Iltimos, reklama xabarini yuboring. Bu matn, rasm, video, audio yoki boshqa turdagi post bo'lishi mumkin. "
+                                         "Bot barcha faol foydalanuvchilarga ushbu xabarni nusxalab yuboradi.",
+                                         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bekor qilish", callback_data="admin:back")]]))
+        await state.set_state(AdminStates.waiting_for_broadcast)
+
     elif action == 'back':
         await state.clear()
         kb = [
             [InlineKeyboardButton(text="📋 Kanallarni ko'rish", callback_data="admin:list")],
             [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="admin:add")],
-            [InlineKeyboardButton(text="➖ Kanalni o'chirish", callback_data="admin:del")]
+            [InlineKeyboardButton(text="➖ Kanalni o'chirish", callback_data="admin:del")],
+            [InlineKeyboardButton(text="👥 Foydalanuvchilar soni", callback_data="admin:users_count")],
+            [InlineKeyboardButton(text="📣 Reklama yuborish", callback_data="admin:broadcast")]
         ]
         await callback.message.edit_text("👑 <b>Admin Panel</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
 
 
 @dp.message(AdminStates.waiting_for_channel, F.from_user.id == ADMIN_ID)
@@ -436,6 +520,44 @@ async def on_channel_info_received(message: Message, state: FSMContext):
          
     await state.clear()
     await cmd_admin(message, state) # show admin panel again
+
+
+@dp.message(AdminStates.waiting_for_broadcast, F.from_user.id == ADMIN_ID)
+async def on_broadcast_received(message: Message, state: FSMContext):
+    await state.clear()
+    status_msg = await message.answer("⏳ Reklama yuborilmoqda, iltimos kuting...")
+    
+    user_ids = await asyncio.to_thread(_in_app_context, db_get_all_active_telegram_user_ids)
+    if not user_ids:
+        await status_msg.edit_text("⚠️ Botda faol foydalanuvchilar topilmadi.")
+        await cmd_admin(message, state)
+        return
+        
+    success = 0
+    failed = 0
+    blocked = 0
+    
+    for uid in user_ids:
+        try:
+            await message.copy_to(chat_id=int(uid))
+            success += 1
+            await asyncio.sleep(0.05) # anti-flood delay
+        except (TelegramForbiddenError, TelegramBadRequest) as e:
+            blocked += 1
+            await asyncio.to_thread(_in_app_context, db_mark_telegram_user_blocked, uid)
+        except Exception as e:
+            log.warning(f"Failed to send broadcast to {uid}: {e}")
+            failed += 1
+            
+    text = (
+        f"✅ <b>Reklama yuborish yakunlandi!</b>\n\n"
+        f"👤 Jami yuborilgan: {len(user_ids)}\n"
+        f"🎉 Muvaffaqiyatli: {success}\n"
+        f"🚫 Bloklaganlar: {blocked}\n"
+        f"⚠️ Xatoliklar: {failed}"
+    )
+    await status_msg.edit_text(text)
+    await cmd_admin(message, state)
 
 
 # ── Main User Handlers ───────────────────────────────────────────────────────
