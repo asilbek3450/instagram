@@ -407,23 +407,26 @@ def _resolve_via_ytdlp(post_url):
     """Local fallback: extract the direct media URL with yt-dlp (no download)."""
     if yt_dlp is None:
         raise ValueError("yt-dlp is not installed.")
-    opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+    # Use format: 'b' to get the best single file with both video and audio
+    # Also bypass YouTube bot detection by faking mobile clients
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+        'format': 'b',
+        'extractor_args': {'youtube': {'player_client': ['ios', 'android']}}
+    }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(post_url, download=False)
-    # Prefer a single-file mp4 format with both audio and video.
-    candidates = [
-        f for f in (info.get('formats') or [])
-        if f.get('url') and f.get('vcodec') != 'none' and f.get('acodec') != 'none'
-    ]
-    candidates.sort(key=lambda f: f.get('height') or 0, reverse=True)
-    url = candidates[0]['url'] if candidates else info.get('url')
+        
+    url = info.get('url')
     if not url:
-        raise ValueError("yt-dlp could not extract a media URL.")
-    height = candidates[0].get('height') if candidates else None
+        raise ValueError("yt-dlp could not extract a direct media URL.")
+        
     return {
         'video_url': url,
-        'extension': 'mp4',
-        'quality': f"{height}p" if height else 'HD',
+        'extension': info.get('ext') or 'mp4',
+        'quality': f"{info.get('height')}p" if info.get('height') else 'HD',
         'title': info.get('title') or '',
         'thumbnail': info.get('thumbnail') or '',
         'like_count': info.get('like_count'),
@@ -435,9 +438,28 @@ def _resolve_via_ytdlp(post_url):
 
 def resolve_download(post_url):
     """
-    Resolve an instagram.com post/reel URL to a direct CDN media URL.
-    Tries RapidAPI first, falls back to yt-dlp per requirements.
+    Resolve an instagram.com post/reel URL, TikTok or YouTube URL to a direct CDN media URL.
+    Tries RapidAPI first for Instagram, falls back to yt-dlp per requirements.
+    For TikTok and YouTube, goes straight to yt-dlp.
     """
+    url_lower = post_url.lower()
+    is_tiktok = 'tiktok.com' in url_lower
+    is_youtube = 'youtube.com' in url_lower or 'youtu.be' in url_lower
+    
+    if is_tiktok or is_youtube:
+        # Bypass Instagram logic for these platforms
+        try:
+            result = _resolve_via_ytdlp(post_url)
+            # Use a dummy code for cache/filename
+            code = "tt" if is_tiktok else "yt"
+            result['code'] = code
+            result['filename'] = f"{'tiktok' if is_tiktok else 'youtube'}_video.{result['extension']}"
+            return result
+        except Exception as e:
+            print(f"[Downloader] yt-dlp failed for {post_url}: {e}")
+            raise ValueError("Ushbu mediani yuklab bo'lmadi. Havola xato yoki video o'chirilgan bo'lishi mumkin.")
+            
+    # Original Instagram logic
     code = parse_post_url(post_url)
     if not code and _SHARE_URL_RE.match((post_url or '').strip()):
         try:
@@ -445,7 +467,7 @@ def resolve_download(post_url):
         except requests.RequestException:
             code = None
     if not code:
-        raise ValueError("Enter a valid Instagram post/reel link.")
+        raise ValueError("Instagram, TikTok yoki YouTube havolasini kiriting.")
     canonical = f"https://www.instagram.com/reel/{code}/"
 
     cache_key = ('resolve', code)

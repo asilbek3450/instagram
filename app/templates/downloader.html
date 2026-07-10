@@ -263,10 +263,10 @@
                     <i class="bi bi-download me-1"></i>Free Tool · No Login Required
                 </span>
                 <h1 class="display-4 fw-bold mb-3" style="line-height: 1.15;">
-                    Instagram Reels <span class="gradient-text">Downloader</span>
+                    Insta, TikTok & YouTube <span class="gradient-text">Downloader</span>
                 </h1>
-                           <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;">
-                    Paste a reel link to download it, or type a username to browse
+                <p class="text-secondary mb-4 mx-auto" style="max-width: 600px; line-height: 1.6;">
+                    Paste an Instagram, TikTok or YouTube link to download it, or type a username to browse
                     and save any public profile's reels, posts and stories in HD.
                 </p>
 
@@ -275,10 +275,10 @@
                     <form id="dl-form" autocomplete="off">
                         <div class="input-group glass-card border-0 rounded-pill overflow-hidden shadow-sm" style="background: var(--bg-card); padding: 5px;">
                             <span class="input-group-text bg-transparent border-0 ps-4 text-secondary">
-                                <i class="bi bi-instagram fs-5"></i>
+                                <i class="bi bi-link-45deg fs-5"></i>
                             </span>
                             <input type="text" id="dl-input" class="form-control border-0 bg-transparent fs-5 px-3 py-3" 
-                                   placeholder="Username or Reel link..." aria-label="Search">
+                                   placeholder="Username, Insta, TikTok yoki YouTube havola..." aria-label="Search">
                             <button type="submit" class="btn gradient-btn rounded-pill px-4 m-1 fw-bold" id="dl-submit-btn">
                                 <span id="dl-submit-label">
                                     <i class="bi bi-search me-1"></i><span class="d-none d-sm-inline"></span>
@@ -288,8 +288,16 @@
                     </form>
                     
                     <div class="mt-3 text-center small text-secondary">
-                        <span class="dl-chip" onclick="fillExample('aytishnik.uz')"><i class="bi bi-person me-1"></i>@username &rarr; reels · posts · stories</span>
-                        <span class="dl-chip" onclick="fillExample('https://www.instagram.com/reel/')"><i class="bi bi-link-45deg me-1"></i>reel link &rarr; download reel</span>
+                        <span class="dl-chip" onclick="fillExample('aytishnik.uz')"><i class="bi bi-person me-1"></i>@username &rarr; reels · posts</span>
+                        <span class="dl-chip" onclick="fillExample('https://vt.tiktok.com/')"><i class="bi bi-tiktok me-1"></i>TikTok havola</span>
+                        <span class="dl-chip" onclick="fillExample('https://youtu.be/')"><i class="bi bi-youtube me-1"></i>YouTube havola</span>
+                    </div>
+
+                    <!-- Telegram bot link -->
+                    <div class="mt-4 text-center">
+                        <a href="https://t.me/instasaveme_bot" target="_blank" class="btn rounded-pill px-4" style="background: rgba(0, 136, 204, 0.1); border: 1px solid #0088cc; color: #0088cc; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 136, 204, 0.2)'" onmouseout="this.style.background='rgba(0, 136, 204, 0.1)'">
+                            <i class="bi bi-telegram me-2"></i>Telegram bot orqali yuklab oling!
+                        </a>
                     </div>
                 </div>
 
@@ -466,8 +474,11 @@
         const raw = document.getElementById('dl-input').value.trim();
         if (!raw) return;
 
-        if (/instagram\.com\/(?:[A-Za-z0-9._]+\/)?(reel|reels|p|tv)\//i.test(raw) ||
-            /instagram\.com\/share\//i.test(raw)) {
+        const isInstaPost = /instagram\.com\/(?:[A-Za-z0-9._]+\/)?(reel|reels|p|tv)\//i.test(raw) || /instagram\.com\/share\//i.test(raw);
+        const isTikTok = /tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com/i.test(raw);
+        const isYouTube = /youtube\.com|youtu\.be/i.test(raw);
+
+        if (isInstaPost || isTikTok || isYouTube) {
             await directDownload(raw);
         } else {
             // A pasted profile URL (instagram.com/username/) browses that

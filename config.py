@@ -65,6 +65,11 @@ class Config:
     RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
     RAPIDAPI_HOST = os.environ.get('RAPIDAPI_HOST', 'instagram120.p.rapidapi.com')
 
+    # ── Telegram bot (public reels/posts/stories downloader) ──
+    # Token from @BotFather. The bot is a separate process:
+    #   python telegram_bot.py
+    TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+
     # ── Anthropic Claude (AI features) ────────────────────────
     # When ANTHROPIC_API_KEY is set, the AI Assistant uses the real Claude API.
     # Otherwise it falls back to built-in heuristics — the app works either way.
