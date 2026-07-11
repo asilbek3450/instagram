@@ -399,6 +399,15 @@ async def cmd_about(message: Message, state: FSMContext):
         [InlineKeyboardButton(text="🌐 Mini Appni ochish", web_app=WebAppInfo(url=WEB_APP_URL))]
     ])
     
+    # Fayl ID ni .env dan olamiz
+    file_id = os.environ.get('ABOUT_VIDEO_FILE_ID')
+    if flask_app:
+        file_id = flask_app.config.get('ABOUT_VIDEO_FILE_ID') or file_id
+        
+    if file_id:
+        await message.answer_video(file_id, caption=WELCOME, reply_markup=kb)
+        return
+
     video_path = os.path.join('app', 'static', 'video', 'instasaveme.mp4')
     if os.path.exists(video_path):
         video = FSInputFile(video_path)
