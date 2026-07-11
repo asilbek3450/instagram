@@ -25,6 +25,7 @@ from aiogram.types import (
     Message,
     WebAppInfo,
     MenuButtonWebApp,
+    FSInputFile,
 )
 
 from app import create_app, db
@@ -389,6 +390,22 @@ async def cmd_start(message: Message, state: FSMContext):
         [InlineKeyboardButton(text="🌐 Mini Appni ochish", web_app=WebAppInfo(url=WEB_APP_URL))]
     ])
     await message.answer(WELCOME, reply_markup=kb)
+
+
+@dp.message(Command('about'))
+async def cmd_about(message: Message, state: FSMContext):
+    await state.clear()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Mini Appni ochish", web_app=WebAppInfo(url=WEB_APP_URL))]
+    ])
+    
+    video_path = os.path.join('app', 'static', 'video', 'instasaveme.mp4')
+    if os.path.exists(video_path):
+        video = FSInputFile(video_path)
+        await message.answer_video(video, caption=WELCOME, reply_markup=kb)
+    else:
+        # Agar video topilmasa, oddiy text jo'natiladi
+        await message.answer(WELCOME, reply_markup=kb)
 
 
 @dp.callback_query(F.data == 'check_sub')
