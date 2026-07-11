@@ -34,9 +34,12 @@ from app.services import downloader_service
 
 log = logging.getLogger('telegram_bot')
 
-# flask_app is only needed when this script is run directly (dev/polling mode).
-# Do NOT call create_app() here — it would trigger a circular import because
-# app/__init__.py imports telegram_bot itself via init_bot_webhook.
+# flask_app is set by init_bot_webhook() at startup (webhook/production mode)
+# or by the __main__ block (dev/polling mode). Declaring it here avoids
+# NameError in _in_app_context while also breaking the circular-import:
+# app/__init__.py → create_app() → imports telegram_bot → would call
+# create_app() again at module level. Assigning None now is safe.
+flask_app = None
 dp = Dispatcher(storage=MemoryStorage())
 
 # Persistent event loop for webhook mode (Gunicorn sync workers).
@@ -203,6 +206,8 @@ dp.callback_query.middleware(CheckSubscriptionMiddleware())
 # ── Utilities ────────────────────────────────────────────────────────────────
 
 def _in_app_context(fn, *args, **kwargs):
+    if flask_app is None:
+        raise RuntimeError('flask_app is not initialised — init_bot_webhook() was not called')
     with flask_app.app_context():
         return fn(*args, **kwargs)
 
@@ -754,6 +759,9 @@ async def setup_bot_webhook(bot_instance: 'Bot', webhook_url: str):
 
 def init_bot_webhook(flask_application):
     """Bot ni webhook rejimida ishga tushiradi (Flask startup da chaqiriladi)."""
+    global flask_app
+    flask_app = flask_application  # make it available to _in_app_context et al.
+
     token = flask_application.config.get('TELEGRAM_BOT_TOKEN')
     if not token:
         log.warning(
