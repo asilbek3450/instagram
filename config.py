@@ -25,11 +25,24 @@ class Config:
     DEBUG = _env_bool('DEBUG', 'False')
 
     # ── SQLAlchemy ────────────────────────────────────────────
+    _db_raw = os.environ.get('DATABASE_URL') or ''
+    # Railway Postgres'dan kelgan "postgres://" ni SQLAlchemy uchun to'g'rilash
+    if _db_raw.startswith('postgres://'):
+        _db_raw = _db_raw.replace('postgres://', 'postgresql+psycopg2://', 1)
+    elif _db_raw.startswith('postgresql://') and '+' not in _db_raw.split('://')[0]:
+        _db_raw = _db_raw.replace('postgresql://', 'postgresql+psycopg2://', 1)
+
     _db_default = 'sqlite:///' + str(
         Path(__file__).parent / 'insta_analytics.db'
     )
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or _db_default
+    SQLALCHEMY_DATABASE_URI = _db_raw or _db_default
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # PostgreSQL connection pool sozlamalari
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,       # connection alive ekanligini tekshiradi
+        'pool_recycle': 300,          # 5 daqiqada bir connection yangilanadi
+        'connect_args': {} if (_db_raw or _db_default).startswith('postgresql') else {},
+    }
 
     # ── JWT ───────────────────────────────────────────────────
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'change-me-jwt-in-production'
@@ -66,9 +79,11 @@ class Config:
     RAPIDAPI_HOST = os.environ.get('RAPIDAPI_HOST', 'instagram120.p.rapidapi.com')
 
     # ── Telegram bot (public reels/posts/stories downloader) ──
-    # Token from @BotFather. The bot is a separate process:
-    #   python telegram_bot.py
+    # Token from @BotFather. Bot webhook orqali Flask ichida ishlaydi.
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    # Railway'da domeningiz: https://instagram.mirolimov.uz
+    # Agar bo'sh qolsa, RAILWAY_PUBLIC_DOMAIN avtomatik ishlatiladi
+    WEBHOOK_HOST = os.environ.get('WEBHOOK_HOST', '')
 
     # ── Anthropic Claude (AI features) ────────────────────────
     # When ANTHROPIC_API_KEY is set, the AI Assistant uses the real Claude API.

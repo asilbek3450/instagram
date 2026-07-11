@@ -713,7 +713,7 @@ def register_webhook_routes(flask_application, bot_instance: 'Bot'):
             data = flask_request.get_json(force=True)
             update = Update.model_validate(data)
             # Gunicorn sync worker uchun asyncio.run() ishlatamiz
-            asyncio.run(dp.process_update(update))
+            asyncio.run(dp.feed_update(bot_instance, update))
         except Exception:
             log.exception('Webhook update processing error')
         return Response('ok', status=200)

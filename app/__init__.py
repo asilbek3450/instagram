@@ -67,22 +67,14 @@ def create_app(config_class='config.Config'):
     jwt.init_app(app)
     babel.init_app(app, locale_selector=get_locale)
 
-    # Auto-migration columns check for SQLite
+    # Jadvallarni yaratish (agar mavjud bo'lmasa)
+    # Flask-Migrate (alembic) orqali sxema o'zgarishlari boshqariladi.
+    # db.create_all() faqat YANGI jadvallar yaratadi, mavjudlarini o'zgartirmaydi.
     with app.app_context():
         try:
-            from sqlalchemy import inspect
-            inspector = inspect(db.engine)
-            if 'instagram_accounts' in inspector.get_table_names():
-                columns = [c['name'] for c in inspector.get_columns('instagram_accounts')]
-                with db.engine.begin() as conn:
-                    if 'access_token' not in columns:
-                        conn.execute(db.text("ALTER TABLE instagram_accounts ADD COLUMN access_token VARCHAR(500)"))
-                    if 'token_expires_at' not in columns:
-                        conn.execute(db.text("ALTER TABLE instagram_accounts ADD COLUMN token_expires_at DATETIME"))
-                    if 'last_synced_at' not in columns:
-                        conn.execute(db.text("ALTER TABLE instagram_accounts ADD COLUMN last_synced_at DATETIME"))
+            db.create_all()
         except Exception as e:
-            app.logger.warning(f"Database auto-migration check warning: {e}")
+            app.logger.warning(f'db.create_all() warning: {e}')
 
     # Initialize Celery
     make_celery(app)
