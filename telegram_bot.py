@@ -792,9 +792,10 @@ def init_bot_webhook(flask_application):
 
     # Webhook ni async tarzda ro'yxatdan o'tkazish
     try:
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(setup_bot_webhook(bot_instance, webhook_url))
-        loop.close()
+        # We must use the persistent _webhook_loop here. If we create a temporary
+        # loop and close it, bot_instance's aiohttp session will be bound to
+        # the closed loop, causing "Event loop is closed" errors later.
+        _webhook_loop.run_until_complete(setup_bot_webhook(bot_instance, webhook_url))
     except Exception:
         log.exception('Webhook registration failed')
 
