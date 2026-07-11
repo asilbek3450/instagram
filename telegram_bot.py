@@ -695,21 +695,106 @@ async def on_item(callback: CallbackQuery):
             "bo'lishi mumkin.")
 
 
-async def main():
-    token = flask_app.config.get('TELEGRAM_BOT_TOKEN')
-    if not token:
-        raise SystemExit(
-            'TELEGRAM_BOT_TOKEN topilmadi. @BotFather dan token oling va '
-            '.env fayliga TELEGRAM_BOT_TOKEN=... qatorini qo\'shing.')
-    bot = Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    
+# ── Webhook mode (Railway/production) ───────────────────────────────────────
+# Bot Telegram webhook orqali Flask ichida ishlaydi.
+# Bu Railway'da cold-start muammosini bartaraf etadi.
+
+def register_webhook_routes(flask_application, bot_instance: 'Bot'):
+    """Flask app ga /webhook/<token> endpoint qo'shadi."""
+    from aiogram.types import Update
+    from flask import request as flask_request, Response
+
+    token = flask_application.config.get('TELEGRAM_BOT_TOKEN', '')
+    secret = token.split(':')[0]  # bot ID ni secret path sifatida ishlatamiz
+
+    @flask_application.route(f'/webhook/{secret}', methods=['POST'])
+    def telegram_webhook():
+        try:
+            data = flask_request.get_json(force=True)
+            update = Update.model_validate(data)
+            # Gunicorn sync worker uchun asyncio.run() ishlatamiz
+            asyncio.run(dp.process_update(update))
+        except Exception:
+            log.exception('Webhook update processing error')
+        return Response('ok', status=200)
+
+    log.info(f'Webhook endpoint registered at /webhook/{secret}')
+    return f'/webhook/{secret}'
+
+
+async def setup_bot_webhook(bot_instance: 'Bot', webhook_url: str):
+    """Telegram API ga webhook URL ni ro'yxatdan o'tkazadi."""
+    await bot_instance.set_webhook(
+        url=webhook_url,
+        drop_pending_updates=True,
+        allowed_updates=dp.resolve_used_update_types(),
+    )
+    log.info(f'Webhook set: {webhook_url}')
+
     # Set Menu Button for Web App
     try:
-        await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Mini App", web_app=WebAppInfo(url=WEB_APP_URL)))
+        await bot_instance.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="Mini App",
+                web_app=WebAppInfo(url=WEB_APP_URL)
+            )
+        )
     except Exception as e:
-        log.warning(f"Could not set menu button: {e}")
+        log.warning(f'Could not set menu button: {e}')
 
-    log.info('Bot is starting (long polling)…')
+
+def init_bot_webhook(flask_application):
+    """Bot ni webhook rejimida ishga tushiradi (Flask startup da chaqiriladi)."""
+    token = flask_application.config.get('TELEGRAM_BOT_TOKEN')
+    if not token:
+        log.warning(
+            'TELEGRAM_BOT_TOKEN topilmadi — bot webhook rejimida ishlamaydi.')
+        return
+
+    webhook_host = flask_application.config.get(
+        'WEBHOOK_HOST',
+        os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
+    )
+    if not webhook_host:
+        log.warning(
+            'WEBHOOK_HOST yoki RAILWAY_PUBLIC_DOMAIN topilmadi — '
+            'bot polling rejimida ishga tushadi.')
+        asyncio.run(_run_polling(token))
+        return
+
+    if not webhook_host.startswith('https://'):
+        webhook_host = f'https://{webhook_host}'
+
+    bot_instance = Bot(
+        token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+
+    path = register_webhook_routes(flask_application, bot_instance)
+    webhook_url = f'{webhook_host.rstrip("/")}{path}'
+
+    # Webhook ni async tarzda ro'yxatdan o'tkazish
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(setup_bot_webhook(bot_instance, webhook_url))
+        loop.close()
+    except Exception:
+        log.exception('Webhook registration failed')
+
+
+async def _run_polling(token: str):
+    """Fallback: development uchun long-polling rejimi."""
+    bot = Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="Mini App",
+                web_app=WebAppInfo(url=WEB_APP_URL)
+            )
+        )
+    except Exception as e:
+        log.warning(f'Could not set menu button: {e}')
+    log.info('Bot is starting (long polling fallback)…')
     await dp.start_polling(bot)
 
 
@@ -717,4 +802,11 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(name)s: %(message)s')
-    asyncio.run(main())
+    # Dev environment: polling rejimida ishga tushir
+    token = flask_app.config.get('TELEGRAM_BOT_TOKEN')
+    if token:
+        asyncio.run(_run_polling(token))
+    else:
+        raise SystemExit(
+            'TELEGRAM_BOT_TOKEN topilmadi. @BotFather dan token oling va '
+            '.env fayliga TELEGRAM_BOT_TOKEN=... qatorini qo\'shing.')

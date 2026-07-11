@@ -154,4 +154,21 @@ def create_app(config_class='config.Config'):
             return jsonify({'error': 'Internal server error'}), 500
         return e
 
+    # ── Keep-alive ping endpoint ───────────────────────────────────
+    @app.route('/ping')
+    def ping():
+        from flask import jsonify
+        return jsonify({'status': 'alive'}), 200
+
+    # ── Telegram Bot Webhook ───────────────────────────────────────
+    # Bot ni webhook rejimida ishga tushiramiz (cold-start yo'q)
+    if not app.testing:
+        try:
+            from telegram_bot import init_bot_webhook
+            init_bot_webhook(app)
+        except ImportError:
+            app.logger.warning('telegram_bot moduli topilmadi, bot o\'chirilgan.')
+        except Exception:
+            app.logger.exception('Bot webhook ishga tushmadi.')
+
     return app
