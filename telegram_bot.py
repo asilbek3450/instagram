@@ -37,6 +37,11 @@ log = logging.getLogger('telegram_bot')
 flask_app = create_app('config.Config')
 dp = Dispatcher(storage=MemoryStorage())
 
+# Persistent event loop for webhook mode (Gunicorn sync workers).
+# asyncio.run() creates+closes a loop on every call, which kills aiohttp's
+# pending timer callbacks with "Event loop is closed". A long-lived loop avoids this.
+_webhook_loop = asyncio.new_event_loop()
+
 MAX_UPLOAD_MB = 48          # Telegram bot uploads are capped at 50 MB
 PAGE_BUTTONS_PER_ROW = 5
 MAX_LISTED_ITEMS = 30       # keep list messages under Telegram's 4096 chars
@@ -712,8 +717,10 @@ def register_webhook_routes(flask_application, bot_instance: 'Bot'):
         try:
             data = flask_request.get_json(force=True)
             update = Update.model_validate(data)
-            # Gunicorn sync worker uchun asyncio.run() ishlatamiz
-            asyncio.run(dp.feed_update(bot_instance, update))
+            # Gunicorn sync worker uchun doimiy event loop ishlatamiz.
+            # asyncio.run() loopni yopib yuboradi va aiohttp callback'larini
+            # "Event loop is closed" xatosi bilan ishdan chiqaradi.
+            _webhook_loop.run_until_complete(dp.feed_update(bot_instance, update))
         except Exception:
             log.exception('Webhook update processing error')
         return Response('ok', status=200)
