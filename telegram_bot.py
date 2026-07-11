@@ -63,7 +63,7 @@ USERNAME_RE = re.compile(r'[A-Za-z0-9._]{1,30}')
 TIKTOK_RE = re.compile(r'(?:tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)', re.IGNORECASE)
 YOUTUBE_RE = re.compile(r'(?:youtube\.com|youtu\.be)', re.IGNORECASE)
 
-WEB_APP_URL = os.environ.get('WEB_APP_URL', 'https://instagram-mirolimov.uz/downloader')
+WEB_APP_URL = os.environ.get('WEB_APP_URL', 'https://instagram.mirolimov.uz/downloader')
 
 TAB_LABELS = {'reels': '🎬 Reels', 'posts': '🖼 Posts', 'stories': '⏱ Stories'}
 
