@@ -34,7 +34,9 @@ from app.services import downloader_service
 
 log = logging.getLogger('telegram_bot')
 
-flask_app = create_app('config.Config')
+# flask_app is only needed when this script is run directly (dev/polling mode).
+# Do NOT call create_app() here — it would trigger a circular import because
+# app/__init__.py imports telegram_bot itself via init_bot_webhook.
 dp = Dispatcher(storage=MemoryStorage())
 
 # Persistent event loop for webhook mode (Gunicorn sync workers).
@@ -810,6 +812,8 @@ if __name__ == '__main__':
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(name)s: %(message)s')
     # Dev environment: polling rejimida ishga tushir
+    # Create the Flask app here (avoids circular import at module level)
+    flask_app = create_app('config.Config')
     token = flask_app.config.get('TELEGRAM_BOT_TOKEN')
     if token:
         asyncio.run(_run_polling(token))
