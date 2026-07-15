@@ -377,9 +377,9 @@ async def send_item(message, item):
     
     if post_url:
         escaped_url = html.escape(post_url)
-        new_caption = f"{escaped_caption}\n\n📲 INSTAGRAMDA: <a href='{escaped_url}'>LINK</a>\n\n🤖 @instasaveme_bot"
+        new_caption = f"{escaped_caption}\n\n\n\n📲 INSTAGRAMDA: <a href='{escaped_url}'>LINK</a>\n\n\n\n🤖 @instasaveme_bot"
     else:
-        new_caption = f"{escaped_caption}\n\n🤖 @instasaveme_bot"
+        new_caption = f"{escaped_caption}\n\n\n\n🤖 @instasaveme_bot"
         
     if item['type'] == 'carousel':
         item['caption'] = new_caption # send_carousel uses item.get('caption')
