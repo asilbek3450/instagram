@@ -119,6 +119,10 @@ def db_get_telegram_users_stats():
     today_count = TelegramUser.query.filter(TelegramUser.created_at >= today_start).count()
     return {"total": total, "active": active, "today": today_count}
 
+def db_get_all_telegram_users_data():
+    users = TelegramUser.query.order_by(TelegramUser.created_at.desc()).all()
+    return [{"chat_id": u.chat_id, "first_name": u.first_name, "last_name": u.last_name, "username": u.username} for u in users]
+
 def db_get_all_active_telegram_user_ids():
     users = TelegramUser.query.filter_by(is_blocked=False).all()
     return [u.chat_id for u in users]
@@ -510,7 +514,46 @@ async def on_admin_action(callback: CallbackQuery, state: FSMContext):
             f"🟢 Faol a'zolar (bloklamagan): {stats['active']}\n"
             f"📅 Bugun qo'shilganlar: {stats['today']}"
         )
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:back")]]))
+        kb = [
+            [InlineKeyboardButton(text="👀 Ularni ko'rish", callback_data="admin:users_list")],
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:back")]
+        ]
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+    elif action == 'users_list':
+        users = await asyncio.to_thread(_in_app_context, db_get_all_telegram_users_data)
+        if not users:
+            await callback.answer("Foydalanuvchilar topilmadi.", show_alert=True)
+            return
+            
+        await callback.message.edit_text("⏳ Ro'yxat tayyorlanmoqda...")
+        
+        lines = []
+        for i, u in enumerate(users, 1):
+            full_name = f"{u['first_name'] or ''} {u['last_name'] or ''}".strip() or "User"
+            name_link = f"<a href='tg://user?id={u['chat_id']}'>{html.escape(full_name)}</a>"
+            username = f"@{u['username']}" if u['username'] else "yo'q"
+            lines.append(f"{i}. {name_link} ➡️ {username}")
+            
+        text_blocks = []
+        current_block = ""
+        for line in lines:
+            if len(current_block) + len(line) + 1 > 4000:
+                text_blocks.append(current_block)
+                current_block = line + "\n"
+            else:
+                current_block += line + "\n"
+        if current_block:
+            text_blocks.append(current_block)
+            
+        for idx, block in enumerate(text_blocks):
+            if idx == len(text_blocks) - 1:
+                kb = [[InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin:users_count")]]
+                await callback.message.answer(block, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+            else:
+                await callback.message.answer(block)
+        
+        await callback.message.delete()
 
     elif action == 'broadcast':
         await callback.message.edit_text("📣 <b>Reklama yuborish bo'limi</b>\n\n"
