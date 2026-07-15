@@ -355,21 +355,37 @@ async def send_item(message, item):
     name = item.get('code') or item.get('id') or 'media'
     caption = item.get('caption')
     if item['type'] == 'carousel':
-        await send_carousel(message, item)
+        pass # we format caption below
     elif item['type'] == 'image':
         if not item.get('image_url'):
             raise ValueError("Bu rasm uchun yuklab olish havolasi topilmadi.")
-        await send_photo_from_url(message, item['image_url'],
-                                  f"instagram_{name}.jpg", caption)
     else:  # video — listing may or may not carry a direct URL
         video_url = item.get('video_url')
         if not video_url:
             info = await run_service(downloader_service.resolve_download,
                                      item['post_url'])
-            video_url = info['video_url']
+            item['video_url'] = info['video_url']
             caption = caption or info.get('title')
-        await send_video_from_url(message, video_url,
-                                  f"instagram_{name}.mp4", caption)
+            
+    original_caption = caption or ''
+    escaped_caption = html.escape(original_caption)
+    post_url = item.get('post_url')
+    
+    if post_url:
+        escaped_url = html.escape(post_url)
+        new_caption = f"{escaped_caption}\n\n📲 INSTAGRAMDA: <a href='{escaped_url}'>LINK</a>\n\n🤖 @instasaveme_bot"
+    else:
+        new_caption = f"{escaped_caption}\n\n🤖 @instasaveme_bot"
+        
+    if item['type'] == 'carousel':
+        item['caption'] = new_caption # send_carousel uses item.get('caption')
+        await send_carousel(message, item)
+    elif item['type'] == 'image':
+        await send_photo_from_url(message, item['image_url'],
+                                  f"instagram_{name}.jpg", new_caption)
+    else:
+        await send_video_from_url(message, item['video_url'],
+                                  f"instagram_{name}.mp4", new_caption)
 
 # ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -613,9 +629,23 @@ async def on_text(message: Message, state: FSMContext):
         status = await message.answer('⏳ Yuklanmoqda…')
         try:
             info = await run_service(downloader_service.resolve_download, text)
+            
+            original_caption = info.get('title') or ''
+            escaped_caption = html.escape(original_caption)
+            escaped_url = html.escape(text)
+            
+            if is_tiktok:
+                platform = "TIKTOKDA"
+            elif is_youtube:
+                platform = "YOUTUBEDA"
+            else:
+                platform = "INSTAGRAMDA"
+                
+            new_caption = f"{escaped_caption}\n\n📲 {platform}: <a href='{escaped_url}'>LINK</a>\n\n🤖 @instasaveme_bot"
+            
             await send_video_from_url(
                 message, info['video_url'], info['filename'],
-                caption=info.get('title'))
+                caption=new_caption)
             await status.delete()
         except ValueError as e:
             await status.edit_text(f"⚠️ {html.escape(str(e))}")

@@ -139,11 +139,9 @@ class AnalyticsService:
         history = FollowersHistory.query.filter_by(instagram_account_id=account_id)\
             .order_by(FollowersHistory.date.desc()).limit(30).all()
 
-        gained_today = lost_today = net_7d = net_30d = 0
+        daily_change = net_7d = net_30d = 0
         if history:
-            latest_gain = history[0].gain_loss
-            gained_today = latest_gain if latest_gain > 0 else 0
-            lost_today = abs(latest_gain) if latest_gain < 0 else 0
+            daily_change = history[0].gain_loss
             net_7d = sum(h.gain_loss for h in history[:7])
             net_30d = sum(h.gain_loss for h in history)
 
@@ -169,8 +167,7 @@ class AnalyticsService:
         # Follower change stats
         base['followers_count'] = account.followers_count if account else 0
         base['following_count'] = account.following_count if account else 0
-        base['gained_today'] = gained_today
-        base['lost_today'] = lost_today
+        base['daily_change'] = daily_change
         base['net_7d'] = net_7d
         base['net_30d'] = net_30d
         base['history'] = [h.to_dict() for h in reversed(history)]
