@@ -257,7 +257,7 @@ def fmt_count(n):
 
 
 def trim(text, limit):
-    text = (text or '').replace('\n', ' ').strip()
+    text = (text or '').strip()
     return text[:limit - 1] + '…' if len(text) > limit else text
 
 
@@ -290,7 +290,8 @@ def feed_text(session):
             parts.append(f"▶️ {fmt_count(item['play_count'])}")
         if item.get('like_count'):
             parts.append(f"❤️ {fmt_count(item['like_count'])}")
-        caption = trim(item.get('caption'), 40)
+        caption_text = (item.get('caption') or '').replace('\n', ' ')
+        caption = trim(caption_text, 40)
         if caption:
             parts.append(html.escape(caption))
         lines.append(' '.join(parts))
@@ -339,18 +340,19 @@ async def send_carousel(message, item):
     await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
     name = item.get('code') or 'media'
     media = []
+    caption = trim(item.get('caption'), 900)
     for i, child in enumerate(children, start=1):
+        current_caption = caption if (i == 1 and caption) else None
         if child.get('video_url'):
             data = await fetch_bytes(child['video_url'])
             media.append(InputMediaVideo(
-                media=BufferedInputFile(data, filename=f"instagram_{name}_{i}.mp4")))
+                media=BufferedInputFile(data, filename=f"instagram_{name}_{i}.mp4"),
+                caption=current_caption))
         else:
             data = await fetch_bytes(child['image_url'])
             media.append(InputMediaPhoto(
-                media=BufferedInputFile(data, filename=f"instagram_{name}_{i}.jpg")))
-    caption = trim(item.get('caption'), 900)
-    if caption:
-        media[0].caption = caption
+                media=BufferedInputFile(data, filename=f"instagram_{name}_{i}.jpg"),
+                caption=current_caption))
     for start in range(0, len(media), 10):
         await message.answer_media_group(media[start:start + 10])
 
@@ -377,9 +379,9 @@ async def send_item(message, item):
     
     if post_url:
         escaped_url = html.escape(post_url)
-        new_caption = f"{escaped_caption}\n\n\n\n📲 INSTAGRAMDA: <a href='{escaped_url}'>LINK</a>\n\n\n\n🤖 @instasaveme_bot"
+        new_caption = f"{escaped_caption}\n\n\n📲 INSTAGRAMDA: <a href='{escaped_url}'>LINK</a>\n\n\n🤖 @instasaveme_bot"
     else:
-        new_caption = f"{escaped_caption}\n\n\n\n🤖 @instasaveme_bot"
+        new_caption = f"{escaped_caption}\n\n🤖 @instasaveme_bot"
         
     if item['type'] == 'carousel':
         item['caption'] = new_caption # send_carousel uses item.get('caption')
