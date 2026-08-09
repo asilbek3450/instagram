@@ -226,6 +226,65 @@ async function connectDemoAccount(e) {
     }
 }
 
+// ── Real Instagram Account Direct Connect ──────────────────────────────────────
+async function connectRealAccountSubmit(e) {
+    if (e) e.preventDefault();
+    const token = getAccessToken();
+    if (!token) {
+        showAlert('warning', 'Please log in again before connecting Instagram.');
+        return;
+    }
+
+    const usernameInput = document.getElementById('real-insta-username');
+    const username = usernameInput ? usernameInput.value.trim().toLowerCase().replace('@', '') : '';
+    if (!username) {
+        showAlert('warning', 'Please enter a valid Instagram username.');
+        return;
+    }
+
+    const btn = document.getElementById('real-connect-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting Real Account...';
+    }
+
+    try {
+        const res = await fetch('/api/analytics/accounts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ username, is_simulated: false })
+        });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('linkAccountModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+
+        if (res.ok) {
+            showAlert('success', `<i class="bi bi-check-circle-fill me-2"></i>Real Instagram account <strong>@${username}</strong> connected successfully! Loading live metrics...`, false);
+            if (usernameInput) usernameInput.value = '';
+            if (data.account && data.account.id) {
+                localStorage.setItem('active_account_id', data.account.id);
+            }
+            fetchAccounts();
+        } else {
+            showAlert('danger', data.error || 'Failed to connect real account.');
+        }
+    } catch (err) {
+        showAlert('danger', 'Server connection error. Please try again.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-instagram me-2"></i>Connect Real Account';
+        }
+    }
+}
+
 // ── Real Google OAuth connect ─────────────────────────────────────────────────
 function connectRealGoogle() {
     const token = getAccessToken();
