@@ -39,6 +39,32 @@ class AuthService:
         }
 
     @staticmethod
+    def login_or_register_google_user(email):
+        if not email:
+            raise ValueError("Email is required for Google login")
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            import secrets
+            # Create verified Google user with random high-entropy password
+            user = User(email=email, role='user', is_verified=True)
+            user.set_password(secrets.token_urlsafe(16))
+            db.session.add(user)
+            db.session.commit()
+        elif not user.is_verified:
+            user.is_verified = True
+            db.session.commit()
+
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
+
+        return {
+            'user': user.to_dict(),
+            'access_token': access_token,
+            'refresh_token': refresh_token
+        }
+
+    @staticmethod
     def verify_email(user_id):
         user = User.query.get(user_id)
         if not user:

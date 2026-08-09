@@ -72,6 +72,14 @@ class Config:
     # field/metric behaviour doesn't shift when Instagram rolls a new default.
     INSTAGRAM_API_VERSION = os.environ.get('INSTAGRAM_API_VERSION', 'v23.0')
 
+    # ── Google OAuth 2.0 ──────────────────────────────────────
+    GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+    GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+    GOOGLE_REDIRECT_URI = os.environ.get(
+        'GOOGLE_REDIRECT_URI',
+        'http://localhost:5001/api/auth/google/callback'
+    )
+
     # ── RapidAPI (public Reels/media downloader) ──────────────
     # Used by the login-free "Downloader" page. The key stays server-side;
     # the frontend only talks to our own /api/downloader/* endpoints.
