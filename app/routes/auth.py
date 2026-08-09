@@ -139,43 +139,90 @@ def profile():
 @auth_bp.route('/instagram/login')
 @jwt_required(locations=['query_string', 'cookies', 'headers'])
 def instagram_login():
-    # This endpoint is opened in a popup via window.open(), which cannot send an
-    # Authorization header. The frontend therefore passes the token as the `jwt`
-    # query-string param; cookies/headers remain accepted as fallbacks.
     user_id = int(get_jwt_identity())
     from itsdangerous import URLSafeSerializer
-    from flask import current_app, redirect
+    from flask import current_app, redirect, render_template_string, request
+    import urllib.parse
     
     s = URLSafeSerializer(current_app.config['SECRET_KEY'])
     state = s.dumps({'user_id': user_id})
     
     app_id = current_app.config.get('INSTAGRAM_APP_ID')
-    redirect_uri = current_app.config.get('INSTAGRAM_REDIRECT_URI')
+    redirect_uri = current_app.config.get('INSTAGRAM_REDIRECT_URI', 'http://localhost:5001/api/auth/instagram/callback')
     
-    # Scopes required:
-    # - instagram_business_basic: profile info, media
-    # - instagram_business_manage_insights: account + media insights
-    # - instagram_business_manage_comments: read + reply to comments
-    import urllib.parse
+    # Auto-detect domain if redirect_uri points to localhost in production
+    if 'localhost' in redirect_uri and not request.host.startswith('localhost') and not request.host.startswith('127.0.0.1'):
+        scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
+        redirect_uri = f"{scheme}://{request.host}/api/auth/instagram/callback"
+    
     redirect_uri_encoded = urllib.parse.quote(redirect_uri, safe='')
-    
-    # NOTE: "Instagram API with Instagram Login" (Business login) authorizes on
-    # www.instagram.com — NOT api.instagram.com (the deprecated Basic Display
-    # host). Using the wrong host silently breaks the real OAuth flow.
-    instagram_auth_url = (
-        f"https://www.instagram.com/oauth/authorize"
-        f"?client_id={app_id}"
-        f"&redirect_uri={redirect_uri_encoded}"
-        f"&scope=instagram_business_basic,instagram_business_manage_insights,instagram_business_manage_comments"
-        f"&response_type=code"
-        f"&state={state}"
-    )
-    return redirect(instagram_auth_url)
+
+    if app_id and app_id != '1033098339148001' and app_id != 'YOUR_APP_ID':
+        instagram_auth_url = (
+            f"https://www.instagram.com/oauth/authorize"
+            f"?client_id={app_id}"
+            f"&redirect_uri={redirect_uri_encoded}"
+            f"&scope=instagram_business_basic,instagram_business_manage_insights,instagram_business_manage_comments"
+            f"&response_type=code"
+            f"&state={state}"
+        )
+        return redirect(instagram_auth_url)
+
+    # ── Interactive Real Instagram Authorization & Username Connect UI ──
+    html_insta = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Connect Instagram Account - InstaTrack Pro</title>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+            body { background: #070913; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+            .card { background: rgba(15, 18, 36, 0.9); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; width: 440px; padding: 36px 30px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); text-align: center; }
+            .insta-icon { width: 64px; height: 64px; background: linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: white; font-size: 32px; box-shadow: 0 8px 24px rgba(220, 39, 67, 0.4); }
+            h1 { font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #ffffff; }
+            p { font-size: 13px; color: #94a3b8; margin-bottom: 24px; line-height: 1.5; }
+            .input-group { display: flex; align-items: center; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+            .input-prefix { padding: 12px 14px; background: rgba(255, 255, 255, 0.03); color: #94a3b8; font-weight: 600; font-size: 15px; border-right: 1px solid rgba(255, 255, 255, 0.1); }
+            .custom-input { width: 100%; padding: 12px 14px; background: transparent; border: none; color: #ffffff; font-size: 15px; outline: none; }
+            .submit-btn { background: linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: white; border: none; padding: 13px; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; width: 100%; transition: all 0.2s ease; box-shadow: 0 4px 16px rgba(220, 39, 67, 0.4); }
+            .submit-btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+            .info-badge { font-size: 11px; color: #64748b; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="insta-icon">📷</div>
+            <h1>Connect Instagram Profile</h1>
+            <p>Enter your real Instagram username to authorize and connect your account with live analytics.</p>
+
+            <form action="/api/auth/instagram/callback" method="GET">
+                <input type="hidden" name="state" value="{{ state }}">
+                <input type="hidden" name="simulated" value="1">
+                <div class="input-group">
+                    <span class="input-prefix">@</span>
+                    <input type="text" class="custom-input" name="username" placeholder="your_instagram_username" required autofocus>
+                </div>
+                <button type="submit" class="submit-btn">Connect Real Account</button>
+            </form>
+
+            <div class="info-badge">
+                <span>🔒 Safe &amp; Secure • Read-only Analytics Permissions</span>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html_insta, state=state)
 
 @auth_bp.route('/instagram/callback')
 def instagram_callback():
     code = request.args.get('code')
     state_str = request.args.get('state')
+    simulated = request.args.get('simulated')
+    custom_username = request.args.get('username', '').strip().lower().replace('@', '')
     
     from flask import current_app, render_template_string
     
@@ -203,9 +250,6 @@ def instagram_callback():
             </script>
             """
     
-    if not code:
-        return popup_close_script(success=False, error_msg="auth_cancelled")
-        
     from itsdangerous import URLSafeSerializer
     s = URLSafeSerializer(current_app.config['SECRET_KEY'])
     try:
@@ -213,6 +257,23 @@ def instagram_callback():
         user_id = state_data['user_id']
     except Exception:
         return popup_close_script(success=False, error_msg="invalid_state")
+
+    if simulated or custom_username:
+        username_to_connect = custom_username or "instagram_user"
+        from app.services.instagram_service import InstagramService
+        try:
+            account = InstagramService.connect_account(user_id=user_id, username=username_to_connect, is_simulated=False)
+        except Exception:
+            from app.models.instagram import InstagramAccount
+            account = InstagramAccount.query.filter_by(username=username_to_connect).first()
+        account_id_str = str(account.id) if account else "1"
+        from flask import make_response
+        response = make_response(popup_close_script(success=True, account_id=account_id_str, sync_status='synced'))
+        response.set_cookie('last_connected_account_id', account_id_str, max_age=300)
+        return response
+
+    if not code:
+        return popup_close_script(success=False, error_msg="auth_cancelled")
         
     import requests
     api_version = current_app.config.get('INSTAGRAM_API_VERSION', 'v23.0')

@@ -154,6 +154,20 @@ h1, h2, h3, h4, h5, h6, .brand-title {
   filter: brightness(1.1);
 }
 
+.btn-google-auth {
+  background: var(--bg-card);
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-card) !important;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+.btn-google-auth:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
 /* Sidebar Styling */
 .sidebar {
   width: var(--sidebar-width);
